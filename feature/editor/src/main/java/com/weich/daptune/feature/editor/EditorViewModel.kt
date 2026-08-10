@@ -3,8 +3,6 @@ package com.weich.daptune.feature.editor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.weich.daptune.core.eq.EqTransforms
-import com.weich.daptune.core.eq.ImportedCurve
-import com.weich.daptune.core.eq.OverflowMode
 import com.weich.daptune.core.model.AppliedSnapshot
 import com.weich.daptune.core.model.DapApplyResult
 import com.weich.daptune.core.model.DapCapability
@@ -16,7 +14,6 @@ import com.weich.daptune.domain.ApplyCurveUseCase
 import com.weich.daptune.domain.AudioRouteMonitor
 import com.weich.daptune.domain.DapGateway
 import com.weich.daptune.domain.DeviceRepository
-import com.weich.daptune.domain.ImportCurveUseCase
 import com.weich.daptune.domain.ProfileRepository
 import com.weich.daptune.domain.SaveProfileUseCase
 import com.weich.daptune.domain.SettingsRepository
@@ -36,8 +33,6 @@ data class EditorUiState(
     val loadedProfileId: String? = null,
     val curve: EqCurve = EqCurve.flat(),
     val originalCurve: EqCurve = EqCurve.flat(),
-    val importedName: String? = null,
-    val importedSource: ProfileSource? = null,
     val selectedBand: Int = 0,
     val route: OutputRoute = OutputRoute.Speaker,
     val capability: DapCapability? = null,
@@ -49,7 +44,7 @@ data class EditorUiState(
         get() = profiles.firstOrNull { it.id == selectedProfileId }
 
     val isDirty: Boolean
-        get() = curve != originalCurve || importedName != null
+        get() = curve != originalCurve
 
     val canApply: Boolean
         get() = capability?.isReady == true && !isApplying
@@ -84,7 +79,6 @@ class EditorViewModel @Inject constructor(
     private val dapGateway: DapGateway,
     private val applyCurve: ApplyCurveUseCase,
     private val saveProfile: SaveProfileUseCase,
-    private val importCurve: ImportCurveUseCase,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState())
     val state: StateFlow<EditorUiState> = mutableState
@@ -115,8 +109,6 @@ class EditorViewModel @Inject constructor(
                 loadedProfileId = profile.id,
                 curve = profile.curve,
                 originalCurve = profile.curve,
-                importedName = null,
-                importedSource = null,
             )
         }
         viewModelScope.launch { settingsRepository.setSelectedProfile(profile.id) }
@@ -137,11 +129,7 @@ class EditorViewModel @Inject constructor(
 
     fun resetChanges() {
         mutableState.update {
-            it.copy(
-                curve = it.originalCurve,
-                importedName = null,
-                importedSource = null,
-            )
+            it.copy(curve = it.originalCurve)
         }
     }
 
@@ -158,19 +146,6 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun importText(text: String, fileName: String, overflowMode: OverflowMode = OverflowMode.FIT) {
-        viewModelScope.launch {
-            runCatching {
-                val imported = importCurve.parse(text, fileName)
-                imported to importCurve.convert(imported, overflowMode)
-            }.onSuccess { (imported, curve) ->
-                acceptImport(imported, curve)
-            }.onFailure { error ->
-                eventChannel.send(EditorEvent.Message(error.message ?: "无法导入文件"))
-            }
-        }
-    }
-
     fun save(name: String, overwrite: Boolean) {
         val current = mutableState.value
         viewModelScope.launch {
@@ -179,8 +154,7 @@ class EditorViewModel @Inject constructor(
                     existingId = if (overwrite) current.selectedProfile?.takeUnless(EqProfile::isBuiltIn)?.id else null,
                     name = name,
                     curve = current.curve,
-                    source = current.importedSource
-                        ?: current.selectedProfile?.source?.takeIf { overwrite }
+                    source = current.selectedProfile?.source?.takeIf { overwrite }
                         ?: ProfileSource.MANUAL,
                 )
             }.onSuccess { saved ->
@@ -191,8 +165,6 @@ class EditorViewModel @Inject constructor(
                         loadedProfileId = saved.id,
                         curve = saved.curve,
                         originalCurve = saved.curve,
-                        importedName = null,
-                        importedSource = null,
                     )
                 }
                 eventChannel.send(EditorEvent.Message("已保存“${saved.name}”"))
@@ -207,9 +179,7 @@ class EditorViewModel @Inject constructor(
         val profile = current.selectedProfile
         eventChannel.trySend(
             EditorEvent.SuggestSaveName(
-                current.importedName
-                    ?: profile?.name
-                    ?: "新配置",
+                profile?.name ?: "新配置",
             ),
         )
     }
@@ -256,8 +226,6 @@ class EditorViewModel @Inject constructor(
                     loadedProfileId = selected.id,
                     curve = selected.curve,
                     originalCurve = selected.curve,
-                    importedName = null,
-                    importedSource = null,
                     route = sources.route,
                     appliedSnapshot = sources.snapshot,
                 )
@@ -271,18 +239,5 @@ class EditorViewModel @Inject constructor(
             }
         }
         viewModelScope.launch { deviceRepository.rememberRoute(sources.route) }
-    }
-
-    private suspend fun acceptImport(imported: ImportedCurve, curve: EqCurve) {
-        mutableState.update {
-            it.copy(
-                curve = curve,
-                importedName = imported.suggestedName,
-                importedSource = imported.source,
-            )
-        }
-        val adjustment = if (imported.exceedsLimit) "，已按比例压缩到 ±10 dB" else ""
-        val warnings = imported.warnings.takeIf(List<String>::isNotEmpty)?.joinToString(prefix = "；") ?: ""
-        eventChannel.send(EditorEvent.Message("已导入${adjustment}${warnings}"))
     }
 }

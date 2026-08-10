@@ -1,7 +1,5 @@
 package com.weich.daptune.feature.editor
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Tune
@@ -40,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -59,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,9 +73,7 @@ import com.weich.daptune.core.designsystem.formatFrequencyWithUnit
 import com.weich.daptune.core.designsystem.formatGain
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqProfile
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,29 +83,11 @@ fun EditorScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val context = LocalContext.current
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val scope = rememberCoroutineScope()
     val bandListState = rememberLazyListState()
     var showTools by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf<String?>(null) }
-
-    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val text = context.contentResolver.openInputStream(uri)
-                        ?.bufferedReader()
-                        ?.use { it.readText() }
-                        ?: error("无法读取文件")
-                    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "导入配置"
-                    text to name
-                }
-            }.onSuccess { (text, name) -> viewModel.importText(text, name) }
-                .onFailure { snackbar.showSnackbar(it.message ?: "无法读取文件") }
-        }
-    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -130,13 +106,6 @@ fun EditorScreen(
                 title = "调音",
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(
-                        onClick = {
-                            fileLauncher.launch(arrayOf("text/*", "application/json", "application/octet-stream"))
-                        },
-                    ) {
-                        Icon(Icons.Outlined.FileOpen, contentDescription = "导入配置")
-                    }
                     IconButton(onClick = { showTools = true }) {
                         Icon(Icons.Outlined.Tune, contentDescription = "曲线处理")
                     }
@@ -267,44 +236,17 @@ private fun ProfileSelector(
         onExpandedChange = { expanded = it },
         modifier = modifier,
     ) {
-        Surface(
+        OutlinedTextField(
+            value = selected?.name ?: "选择配置",
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
             modifier = Modifier
                 .menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "当前配置",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = selected?.name ?: "选择配置",
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (isDirty) {
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "已修改",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                }
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded)
-            }
-        }
+            label = { Text(if (isDirty) "当前配置 · 已修改" else "当前配置") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+        )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             profiles.forEach { profile ->
                 DropdownMenuItem(
@@ -338,9 +280,11 @@ private fun CurveOverviewCard(
     modifier: Modifier = Modifier,
 ) {
     AppCard(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp)) {
+        Column {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, top = 18.dp, end = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -357,38 +301,16 @@ private fun CurveOverviewCard(
                 }
                 StatusPill(text = capabilityLabel, positive = capabilityReady)
             }
-            Spacer(Modifier.height(18.dp))
-            Row(
+            Spacer(Modifier.height(12.dp))
+            EqCurveOverview(
+                curve = curve,
+                selectedBand = selectedBand,
+                onBandSelected = onBandSelected,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(212.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(34.dp)
-                        .padding(vertical = 7.dp),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    listOf("+10", "0", "−10").forEach { label ->
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                EqCurveOverview(
-                    curve = curve,
-                    selectedBand = selectedBand,
-                    onBandSelected = onBandSelected,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                )
-            }
+                    .height(212.dp)
+                    .padding(bottom = 14.dp),
+            )
         }
     }
 }
@@ -474,7 +396,6 @@ private fun EditorActionBar(
             if (isDirty) {
                 FilledTonalButton(
                     onClick = onReset,
-                    modifier = Modifier.height(52.dp),
                 ) {
                     Icon(Icons.Outlined.RestartAlt, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -485,8 +406,7 @@ private fun EditorActionBar(
                 onClick = onApply,
                 enabled = canApply,
                 modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp),
+                    .weight(1f),
             ) {
                 if (isApplying) {
                     CircularProgressIndicator(

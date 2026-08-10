@@ -3,10 +3,9 @@ package com.weich.daptune.core.designsystem
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -291,6 +289,9 @@ fun VerticalBandSlider(
     val thumbTouchSizePx = with(density) { thumbTouchSize.toPx() }
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSelected by rememberUpdatedState(onSelected)
+    val currentValueQ4 by rememberUpdatedState(valueQ4)
+    val bandInteractionSource = remember { MutableInteractionSource() }
+    val thumbInteractionSource = remember { MutableInteractionSource() }
     var lastReportedQ4 by remember { mutableIntStateOf(valueQ4) }
     var dragging by remember { mutableStateOf(false) }
     var dragY by remember { mutableFloatStateOf(trackHeightPx / 2f) }
@@ -312,21 +313,20 @@ fun VerticalBandSlider(
         }
     }
 
-    val dragState = rememberDraggableState { delta ->
-        dragY = (dragY + delta).coerceIn(verticalInsetPx, trackHeightPx - verticalInsetPx)
-        update(dragY)
-    }
-
     Column(
         modifier = modifier
             .width(56.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MaterialTheme.shapes.small)
             .background(
                 if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f) else {
                     MaterialTheme.colorScheme.surfaceContainerLow
                 },
             )
-            .clickable { currentOnSelected() }
+            .clickable(
+                interactionSource = bandInteractionSource,
+                indication = null,
+                onClick = { currentOnSelected() },
+            )
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -414,23 +414,37 @@ fun VerticalBandSlider(
                             true
                         }
                     }
-                    .clickable { currentOnSelected() }
-                    .draggable(
-                        state = dragState,
-                        orientation = Orientation.Vertical,
-                        onDragStarted = {
-                            dragging = true
-                            dragY = yFor(valueQ4)
-                            currentOnSelected()
-                            haptic.performHapticFeedback(
-                                HapticFeedbackType.GestureThresholdActivate,
-                            )
-                        },
-                        onDragStopped = {
-                            dragging = false
-                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                        },
-                    ),
+                    .clickable(
+                        interactionSource = thumbInteractionSource,
+                        indication = null,
+                        onClick = { currentOnSelected() },
+                    )
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = {
+                                dragging = true
+                                dragY = yFor(currentValueQ4)
+                                currentOnSelected()
+                                haptic.performHapticFeedback(
+                                    HapticFeedbackType.GestureThresholdActivate,
+                                )
+                            },
+                            onDragEnd = {
+                                dragging = false
+                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                            },
+                            onDragCancel = {
+                                dragging = false
+                            },
+                        ) { change, dragAmount ->
+                            // The 48 dp thumb target owns both axes so a horizontal
+                            // movement cannot leak into the surrounding LazyRow.
+                            change.consume()
+                            dragY = (dragY + dragAmount.y)
+                                .coerceIn(verticalInsetPx, trackHeightPx - verticalInsetPx)
+                            update(dragY)
+                        }
+                    },
             )
         }
         Text(

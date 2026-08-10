@@ -84,7 +84,7 @@ fun AutomationScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val context = LocalContext.current
     var pickerTarget by remember { mutableStateOf<ProfilePickerTarget?>(null) }
     val notificationPermission = rememberLauncherForActivityResult(

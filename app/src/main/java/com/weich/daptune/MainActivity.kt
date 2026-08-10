@@ -104,11 +104,7 @@ private fun DapTuneApp() {
         ) {
             when (destinations[it]) {
                 AppDestination.Editor -> EditorScreen()
-                AppDestination.Profiles -> ProfilesScreen(
-                    onOpenEditor = {
-                        scope.launch { pagerState.animateScrollToPage(AppDestination.Editor.ordinal) }
-                    },
-                )
+                AppDestination.Profiles -> ProfilesScreen()
                 AppDestination.Automation -> AutomationScreen()
             }
         }
