@@ -47,7 +47,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -71,16 +73,27 @@ fun EqCurveOverview(
     val grid = MaterialTheme.colorScheme.outlineVariant
     val zero = MaterialTheme.colorScheme.outline
     val surface = MaterialTheme.colorScheme.surfaceContainerLow
+    val axisStyle = MaterialTheme.typography.labelSmall.copy(
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
+    val textMeasurer = rememberTextMeasurer()
     val currentOnBandSelected by rememberUpdatedState(onBandSelected)
+    val plotStartInset = 30.dp
+    val plotEndInset = 8.dp
+    val plotTopInset = 8.dp
+    val plotBottomInset = 24.dp
+    val verticalGridBands = listOf(0, 4, 9, 14, 19)
 
     Canvas(
         modifier = modifier
             .pointerInput(curve) {
                 detectTapGestures { tap ->
-                    val horizontalInset = with(density) { 4.dp.toPx() }
-                    val verticalInset = with(density) { 8.dp.toPx() }
+                    val startInset = with(density) { plotStartInset.toPx() }
+                    val endInset = with(density) { plotEndInset.toPx() }
+                    val topInset = with(density) { plotTopInset.toPx() }
+                    val bottomInset = with(density) { plotBottomInset.toPx() }
                     val hitRadius = with(density) { 24.dp.toPx() }
                     nearestCurveBandAt(
                         curve = curve,
@@ -88,9 +101,11 @@ fun EqCurveOverview(
                         tapY = tap.y,
                         widthPx = size.width.toFloat(),
                         heightPx = size.height.toFloat(),
-                        horizontalInsetPx = horizontalInset,
-                        verticalInsetPx = verticalInset,
+                        horizontalInsetPx = startInset,
+                        verticalInsetPx = topInset,
                         hitRadiusPx = hitRadius,
+                        horizontalEndInsetPx = endInset,
+                        verticalEndInsetPx = bottomInset,
                     )?.let { nearest ->
                         currentOnBandSelected(nearest)
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
@@ -101,31 +116,61 @@ fun EqCurveOverview(
                 contentDescription = "20 段均衡器曲线，点按频点以选择"
             },
     ) {
-        val horizontalInset = 4.dp.toPx()
-        val verticalInset = 8.dp.toPx()
-        val plotWidth = (size.width - horizontalInset * 2f).coerceAtLeast(1f)
-        val plotHeight = (size.height - verticalInset * 2f).coerceAtLeast(1f)
-        val zeroY = verticalInset + plotHeight / 2f
+        val startInset = plotStartInset.toPx()
+        val endInset = plotEndInset.toPx()
+        val topInset = plotTopInset.toPx()
+        val bottomInset = plotBottomInset.toPx()
+        val plotEndX = size.width - endInset
+        val plotEndY = size.height - bottomInset
+        val plotWidth = (size.width - startInset - endInset).coerceAtLeast(1f)
+        val plotHeight = (size.height - topInset - bottomInset).coerceAtLeast(1f)
+        val zeroY = topInset + plotHeight / 2f
 
         fun yFor(gainQ4: Int): Float =
-            verticalInset + plotHeight * (0.5f - gainQ4.toFloat() / (EqCurve.MAX_GAIN_Q4 * 2f))
+            topInset + plotHeight * (0.5f - gainQ4.toFloat() / (EqCurve.MAX_GAIN_Q4 * 2f))
 
         listOf(10, 5, 0, -5, -10).forEach { db ->
             val y = yFor(db * EqCurve.Q4_PER_DB)
             drawLine(
                 color = if (db == 0) zero else grid,
-                start = Offset(horizontalInset, y),
-                end = Offset(size.width - horizontalInset, y),
+                start = Offset(startInset, y),
+                end = Offset(plotEndX, y),
                 strokeWidth = if (db == 0) 1.25.dp.toPx() else 0.75.dp.toPx(),
             )
+            val label = when {
+                db > 0 -> "+$db"
+                db < 0 -> "−${-db}"
+                else -> "0"
+            }
+            val labelLayout = textMeasurer.measure(text = label, style = axisStyle)
+            drawText(
+                textLayoutResult = labelLayout,
+                topLeft = Offset(
+                    x = 3.dp.toPx(),
+                    y = (y - labelLayout.size.height / 2f)
+                        .coerceIn(0f, plotEndY - labelLayout.size.height),
+                ),
+            )
         }
-        listOf(0, 4, 9, 14, 19).forEach { index ->
-            val x = horizontalInset + plotWidth * index / (DapBandPlan.bandCount - 1)
+        verticalGridBands.forEach { index ->
+            val x = startInset + plotWidth * index / (DapBandPlan.bandCount - 1)
             drawLine(
                 color = grid.copy(alpha = 0.62f),
-                start = Offset(x, verticalInset),
-                end = Offset(x, size.height - verticalInset),
+                start = Offset(x, topInset),
+                end = Offset(x, plotEndY),
                 strokeWidth = 0.75.dp.toPx(),
+            )
+            val label = formatFrequency(DapBandPlan.frequenciesHz[index])
+            val labelLayout = textMeasurer.measure(text = label, style = axisStyle)
+            drawText(
+                textLayoutResult = labelLayout,
+                topLeft = Offset(
+                    x = (x - labelLayout.size.width / 2f).coerceIn(
+                        2.dp.toPx(),
+                        size.width - labelLayout.size.width - 2.dp.toPx(),
+                    ),
+                    y = plotEndY + 3.dp.toPx(),
+                ),
             )
         }
 
@@ -135,8 +180,10 @@ fun EqCurveOverview(
                 index = index,
                 widthPx = size.width,
                 heightPx = size.height,
-                horizontalInsetPx = horizontalInset,
-                verticalInsetPx = verticalInset,
+                horizontalInsetPx = startInset,
+                verticalInsetPx = topInset,
+                horizontalEndInsetPx = endInset,
+                verticalEndInsetPx = bottomInset,
             )
         }
         val linePath = Path().apply {
@@ -153,8 +200,8 @@ fun EqCurveOverview(
             path = fillPath,
             brush = Brush.verticalGradient(
                 colors = listOf(primary.copy(alpha = 0.24f), primary.copy(alpha = 0.025f)),
-                startY = verticalInset,
-                endY = size.height - verticalInset,
+                startY = topInset,
+                endY = plotEndY,
             ),
         )
         drawPath(
@@ -168,8 +215,8 @@ fun EqCurveOverview(
         points.getOrNull(selectedBand)?.let { point ->
             drawLine(
                 color = primary.copy(alpha = 0.18f),
-                start = Offset(point.x, verticalInset),
-                end = Offset(point.x, size.height - verticalInset),
+                start = Offset(point.x, topInset),
+                end = Offset(point.x, plotEndY),
                 strokeWidth = 1.dp.toPx(),
             )
             drawCircle(primary.copy(alpha = 0.16f), radius = 11.dp.toPx(), center = point)
@@ -525,6 +572,8 @@ internal fun nearestCurveBandAt(
     horizontalInsetPx: Float,
     verticalInsetPx: Float,
     hitRadiusPx: Float,
+    horizontalEndInsetPx: Float = horizontalInsetPx,
+    verticalEndInsetPx: Float = verticalInsetPx,
 ): Int? {
     val nearest = (0 until DapBandPlan.bandCount).minByOrNull { index ->
         val point = curvePointForBand(
@@ -534,6 +583,8 @@ internal fun nearestCurveBandAt(
             heightPx = heightPx,
             horizontalInsetPx = horizontalInsetPx,
             verticalInsetPx = verticalInsetPx,
+            horizontalEndInsetPx = horizontalEndInsetPx,
+            verticalEndInsetPx = verticalEndInsetPx,
         )
         hypot(tapX - point.x, tapY - point.y)
     } ?: return null
@@ -544,6 +595,8 @@ internal fun nearestCurveBandAt(
         heightPx = heightPx,
         horizontalInsetPx = horizontalInsetPx,
         verticalInsetPx = verticalInsetPx,
+        horizontalEndInsetPx = horizontalEndInsetPx,
+        verticalEndInsetPx = verticalEndInsetPx,
     )
     return nearest.takeIf { hypot(tapX - point.x, tapY - point.y) <= hitRadiusPx }
 }
@@ -555,9 +608,11 @@ private fun curvePointForBand(
     heightPx: Float,
     horizontalInsetPx: Float,
     verticalInsetPx: Float,
+    horizontalEndInsetPx: Float = horizontalInsetPx,
+    verticalEndInsetPx: Float = verticalInsetPx,
 ): Offset {
-    val plotWidth = (widthPx - horizontalInsetPx * 2f).coerceAtLeast(1f)
-    val plotHeight = (heightPx - verticalInsetPx * 2f).coerceAtLeast(1f)
+    val plotWidth = (widthPx - horizontalInsetPx - horizontalEndInsetPx).coerceAtLeast(1f)
+    val plotHeight = (heightPx - verticalInsetPx - verticalEndInsetPx).coerceAtLeast(1f)
     return Offset(
         x = horizontalInsetPx + plotWidth * index / (DapBandPlan.bandCount - 1),
         y = verticalInsetPx +

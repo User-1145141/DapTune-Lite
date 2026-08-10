@@ -68,6 +68,30 @@ class EqVisualsMathTest {
         )
     }
 
+    @Test
+    fun `curve hit testing supports axis label insets`() {
+        val band = 19
+        val endInset = 8f
+        val bottomInset = 24f
+        val x = ChartWidth - endInset
+        val y = VerticalInset + (ChartHeight - VerticalInset - bottomInset) / 2f
+        assertEquals(
+            band,
+            nearestCurveBandAt(
+                curve = EqCurve.flat(),
+                tapX = x,
+                tapY = y,
+                widthPx = ChartWidth,
+                heightPx = ChartHeight,
+                horizontalInsetPx = 30f,
+                verticalInsetPx = VerticalInset,
+                hitRadiusPx = HitRadius,
+                horizontalEndInsetPx = endInset,
+                verticalEndInsetPx = bottomInset,
+            ),
+        )
+    }
+
     private fun gainAt(y: Float): Int = gainQ4ForTrackPosition(
         yPx = y,
         trackHeightPx = TrackHeight,
