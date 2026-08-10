@@ -1,0 +1,302 @@
+package com.weich.daptune.feature.profiles
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.weich.daptune.core.designsystem.AppCard
+import com.weich.daptune.core.designsystem.CurveSparkline
+import com.weich.daptune.core.designsystem.DapTuneTopAppBar
+import com.weich.daptune.core.designsystem.formatGain
+import com.weich.daptune.core.model.EqProfile
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfilesScreen(
+    onOpenEditor: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: ProfilesViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var deleting by remember { mutableStateOf<EqProfile?>(null) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect(snackbar::showSnackbar)
+    }
+
+    Scaffold(
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            DapTuneTopAppBar(
+                title = "配置",
+                scrollBehavior = scrollBehavior,
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = padding.calculateTopPadding() + 8.dp,
+                end = 16.dp,
+                bottom = padding.calculateBottomPadding() + 28.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeading("内置")
+            }
+            items(
+                items = state.builtIns,
+                key = EqProfile::id,
+            ) { profile ->
+                ProfileCard(
+                    profile = profile,
+                    selected = profile.id == state.selectedProfileId,
+                    onClick = {
+                        viewModel.select(profile)
+                        onOpenEditor()
+                    },
+                    onDuplicate = { viewModel.duplicate(profile) },
+                    onDelete = null,
+                )
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeading("我的配置", modifier = Modifier.padding(top = 8.dp))
+            }
+            if (state.userProfiles.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    AppCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(20.dp)) {
+                            Text("还没有自定义配置", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "在调音页修改并保存曲线，或从文件导入。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(
+                    items = state.userProfiles,
+                    key = EqProfile::id,
+                ) { profile ->
+                    ProfileCard(
+                        profile = profile,
+                        selected = profile.id == state.selectedProfileId,
+                        onClick = {
+                            viewModel.select(profile)
+                            onOpenEditor()
+                        },
+                        onDuplicate = { viewModel.duplicate(profile) },
+                        onDelete = { deleting = profile },
+                    )
+                }
+            }
+        }
+    }
+
+    deleting?.let { profile ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("删除“${profile.name}”？") },
+            text = { Text("使用此配置的设备将改为跟随默认配置。") },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text("取消") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.delete(profile)
+                        deleting = null
+                    },
+                ) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SectionHeading(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun ProfileCard(
+    profile: EqProfile,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(190.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        ),
+        border = BorderStroke(
+            width = if (selected) 1.5.dp else 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = onClick)
+                .padding(start = 14.dp, top = 10.dp, end = 6.dp, bottom = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = profile.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (selected) {
+                        Text(
+                            text = "当前",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Outlined.MoreHoriz, contentDescription = "更多")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("复制") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDuplicate()
+                            },
+                        )
+                        onDelete?.let { delete ->
+                            DropdownMenuItem(
+                                text = { Text("删除") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    delete()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            CurveSparkline(
+                curve = profile.curve,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(82.dp)
+                    .padding(end = 8.dp),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = curveRange(profile),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun curveRange(profile: EqProfile): String {
+    val gains = profile.curve.toQ4List()
+    val minimum = gains.minOrNull() ?: 0
+    val maximum = gains.maxOrNull() ?: 0
+    return if (minimum == maximum) {
+        "${formatGain(minimum)} dB"
+    } else {
+        "${formatGain(minimum)} — ${formatGain(maximum)} dB"
+    }
+}

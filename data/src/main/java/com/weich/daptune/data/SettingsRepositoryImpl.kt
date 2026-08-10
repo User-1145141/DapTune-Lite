@@ -1,0 +1,59 @@
+package com.weich.daptune.data
+
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.weich.daptune.core.model.AppSettings
+import com.weich.daptune.domain.SettingsRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+
+private val Context.dapTuneDataStore by preferencesDataStore(name = "daptune_settings")
+
+@Singleton
+class SettingsRepositoryImpl @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+) : SettingsRepository {
+    override val settings: Flow<AppSettings> = context.dapTuneDataStore.data
+        .catch { error ->
+            if (error is IOException) emit(androidx.datastore.preferences.core.emptyPreferences()) else throw error
+        }
+        .map { preferences ->
+            AppSettings(
+                automationEnabled = preferences[AutomationEnabled] ?: false,
+                selectedProfileId = preferences[SelectedProfile] ?: "builtin.flat",
+                defaultProfileId = preferences[DefaultProfile] ?: "builtin.flat",
+                applyAtBoot = preferences[ApplyAtBoot] ?: false,
+            )
+        }
+
+    override suspend fun setSelectedProfile(profileId: String) {
+        context.dapTuneDataStore.edit { it[SelectedProfile] = profileId }
+    }
+
+    override suspend fun setDefaultProfile(profileId: String) {
+        context.dapTuneDataStore.edit { it[DefaultProfile] = profileId }
+    }
+
+    override suspend fun setAutomationEnabled(enabled: Boolean) {
+        context.dapTuneDataStore.edit { it[AutomationEnabled] = enabled }
+    }
+
+    override suspend fun setApplyAtBoot(enabled: Boolean) {
+        context.dapTuneDataStore.edit { it[ApplyAtBoot] = enabled }
+    }
+
+    private companion object {
+        val AutomationEnabled = booleanPreferencesKey("automation_enabled")
+        val SelectedProfile = stringPreferencesKey("selected_profile_id")
+        val DefaultProfile = stringPreferencesKey("default_profile_id")
+        val ApplyAtBoot = booleanPreferencesKey("apply_at_boot")
+    }
+}
