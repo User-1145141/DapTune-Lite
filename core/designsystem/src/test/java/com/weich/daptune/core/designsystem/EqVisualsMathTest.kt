@@ -8,28 +8,40 @@ import org.junit.Test
 class EqVisualsMathTest {
     @Test
     fun `track endpoints and center map to exact gains`() {
-        assertEquals(EqCurve.MAX_GAIN_Q4, gainAt(y = 12f))
-        assertEquals(0, gainAt(y = 150f))
-        assertEquals(-EqCurve.MAX_GAIN_Q4, gainAt(y = 288f))
+        assertEquals(EqCurve.MAX_BOOST_Q4, gainAt(y = 12f, axis = DefaultAxis))
+        assertEquals(0, gainAt(y = 150f, axis = DefaultAxis))
+        assertEquals(-EqCurve.MAX_BOOST_Q4, gainAt(y = 288f, axis = DefaultAxis))
     }
 
     @Test
     fun `track position is always clamped and snapped to half decibel`() {
-        assertEquals(EqCurve.MAX_GAIN_Q4, gainAt(y = -1_000f))
-        assertEquals(-EqCurve.MAX_GAIN_Q4, gainAt(y = 1_000f))
-        assertEquals(0, gainAt(y = 153f) % (EqCurve.Q4_PER_DB / 2))
+        assertEquals(EqCurve.MAX_BOOST_Q4, gainAt(y = -1_000f, axis = ExpandedAxis))
+        assertEquals(-320, gainAt(y = 1_000f, axis = ExpandedAxis))
+        assertEquals(0, gainAt(y = 153f, axis = ExpandedAxis) % (EqCurve.Q4_PER_DB / 2))
     }
 
     @Test
-    fun `gain to track position is the inverse at every step`() {
-        for (gainQ4 in -EqCurve.MAX_GAIN_Q4..EqCurve.MAX_GAIN_Q4 step EqCurve.Q4_PER_DB / 2) {
+    fun `gain to track position is the inverse across an expanded axis`() {
+        for (gainQ4 in ExpandedAxis.minimumQ4..ExpandedAxis.maximumQ4 step EqCurve.Q4_PER_DB / 2) {
             val y = trackYForGainQ4(
                 gainQ4 = gainQ4,
                 trackHeightPx = TrackHeight,
                 verticalInsetPx = TrackInset,
+                axis = ExpandedAxis,
             )
-            assertEquals(gainQ4, gainAt(y))
+            assertEquals(gainQ4, gainAt(y, ExpandedAxis))
         }
+    }
+
+    @Test
+    fun `axis defaults to plus or minus ten and expands downward`() {
+        assertEquals(EqCurve.MAX_BOOST_Q4, DefaultAxis.maximumQ4)
+        assertEquals(-EqCurve.MAX_BOOST_Q4, DefaultAxis.minimumQ4)
+        assertEquals(-320, ExpandedAxis.minimumQ4)
+        assertEquals(
+            listOf(160, 80, 0, -80, -160, -240, -320),
+            ExpandedAxis.majorTicksQ4(),
+        )
     }
 
     @Test
@@ -92,13 +104,16 @@ class EqVisualsMathTest {
         )
     }
 
-    private fun gainAt(y: Float): Int = gainQ4ForTrackPosition(
+    private fun gainAt(y: Float, axis: GainAxis): Int = gainQ4ForTrackPosition(
         yPx = y,
         trackHeightPx = TrackHeight,
         verticalInsetPx = TrackInset,
+        axis = axis,
     )
 
     private companion object {
+        val DefaultAxis = gainAxisForMinimum(0)
+        val ExpandedAxis = gainAxisForMinimum(-281)
         const val TrackHeight = 300f
         const val TrackInset = 12f
         const val ChartWidth = 360f

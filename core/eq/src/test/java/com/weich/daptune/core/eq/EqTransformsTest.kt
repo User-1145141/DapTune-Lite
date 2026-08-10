@@ -2,19 +2,33 @@ package com.weich.daptune.core.eq
 
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqCurve
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EqTransformsTest {
     @Test
-    fun peakToZero_placesMaximumAtZeroAndKeepsRangeValid() {
-        val source = EqCurve.ofQ4(List(DapBandPlan.bandCount) { index -> index * 8 - 80 })
+    fun peakToZero_translatesWholeCurveWithoutClippingAttenuation() {
+        val source = EqCurve.ofQ4(
+            intArrayOf(
+                160, 160, 160, 130, 49, -34, -50, -7, 35, 40,
+                -23, -103, -121, -112, -67, 14, 64, 64, 64, 64,
+            ),
+        )
 
         val result = EqTransforms.peakToZero(source)
 
         assertEquals(0, result.toQ4List().max())
-        assertTrue(result.toQ4List().min() >= -EqCurve.MAX_GAIN_Q4)
+        assertEquals(-281, result.toQ4List().min())
+        assertArrayEquals(
+            intArrayOf(
+                0, 0, 0, -30, -111, -194, -210, -167, -125, -120,
+                -183, -263, -281, -272, -227, -146, -96, -96, -96, -96,
+            ),
+            result.toQ4Array(),
+        )
     }
 
     @Test
@@ -27,13 +41,37 @@ class EqTransformsTest {
     }
 
     @Test
-    fun fit_preservesShapeAndLimitsExtremes() {
+    fun fit_scalesOnlyWhenPositiveBoostExceedsLimit() {
         val source = List(DapBandPlan.bandCount) { index -> -20.0 + index * 2.0 }
 
         val conversion = EqTransforms.quantize(source, OverflowMode.FIT)
 
         assertTrue(conversion.adjusted)
-        assertEquals(-EqCurve.MAX_GAIN_Q4, conversion.curve.toQ4List().min())
-        assertTrue(conversion.curve.toQ4List().max() <= EqCurve.MAX_GAIN_Q4)
+        assertEquals(-178, conversion.curve.toQ4List().min())
+        assertEquals(EqCurve.MAX_BOOST_Q4, conversion.curve.toQ4List().max())
+    }
+
+    @Test
+    fun negativeAttenuationIsNeverAdjustedOrClamped() {
+        val source = List(DapBandPlan.bandCount) { index -> if (index == 0) -30.0 else 9.0 }
+
+        val fit = EqTransforms.quantize(source, OverflowMode.FIT)
+        val clamp = EqTransforms.quantize(source, OverflowMode.CLAMP)
+
+        assertFalse(fit.adjusted)
+        assertEquals(-30.0, fit.curve.gainDb(0), 0.0)
+        assertEquals(-30.0, clamp.curve.gainDb(0), 0.0)
+        assertEquals(9.0, fit.curve.gainDb(1), 0.0)
+    }
+
+    @Test
+    fun clampLimitsPositiveBoostAndPreservesDeepCut() {
+        val source = List(DapBandPlan.bandCount) { index -> if (index == 0) -30.0 else 15.0 }
+
+        val conversion = EqTransforms.quantize(source, OverflowMode.CLAMP)
+
+        assertTrue(conversion.adjusted)
+        assertEquals(-30.0, conversion.curve.gainDb(0), 0.0)
+        assertEquals(10.0, conversion.curve.gainDb(1), 0.0)
     }
 }

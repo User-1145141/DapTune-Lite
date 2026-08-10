@@ -22,8 +22,9 @@ class ProfileRepositoryImpl @Inject constructor(
 
     override suspend fun ensureBuiltIns() {
         val now = System.currentTimeMillis()
+        val currentBuiltIns = BuiltInPresets.all
         profileDao.upsertAll(
-            BuiltInPresets.all.map { preset ->
+            currentBuiltIns.map { preset ->
                 val existing = profileDao.getById(preset.id)
                 ProfileEntity(
                     id = preset.id,
@@ -37,6 +38,7 @@ class ProfileRepositoryImpl @Inject constructor(
                 )
             },
         )
+        profileDao.deleteObsoleteBuiltIns(currentBuiltIns.map { it.id })
     }
 
     override suspend fun getProfile(id: String): EqProfile? = profileDao.getById(id)?.toModel()

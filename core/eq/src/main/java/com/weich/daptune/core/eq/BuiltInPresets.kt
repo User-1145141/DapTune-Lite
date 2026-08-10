@@ -10,19 +10,11 @@ data class BuiltInPreset(
 )
 
 object BuiltInPresets {
-    // The measured .79/turner speaker correction, resampled on a logarithmic
-    // frequency axis and stored directly in Dolby DAP's signed Q4 dB units.
-    private val turnerSpeakerCorrectionQ4 = intArrayOf(
-        160, 160, 160, 130, 49, -34, -50, -7, 35, 40,
-        -23, -103, -121, -112, -67, 14, 64, 64, 64, 64,
-    )
-
     val all: List<BuiltInPreset> = listOf(
         preset("builtin.flat", "平直", 0, doubleArrayOf(
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
         )),
-        q4Preset("builtin.turner_speaker", "79 扬声器", 5, turnerSpeakerCorrectionQ4),
         preset("builtin.warm", "暖厚", 10, doubleArrayOf(
             4.0, 3.8, 3.4, 2.8, 2.1, 1.4, 0.8, 0.3, 0.0, -0.2,
             -0.4, -0.5, -0.4, -0.2, 0.0, 0.1, 0.0, -0.2, -0.4, -0.6,
@@ -54,14 +46,6 @@ object BuiltInPresets {
             id = id,
             name = name,
             curve = EqTransforms.quantize(gains.asList(), OverflowMode.FIT).curve,
-            sortOrder = sortOrder,
-        )
-
-    private fun q4Preset(id: String, name: String, sortOrder: Int, gainsQ4: IntArray): BuiltInPreset =
-        BuiltInPreset(
-            id = id,
-            name = name,
-            curve = EqCurve.ofQ4(gainsQ4),
             sortOrder = sortOrder,
         )
 }

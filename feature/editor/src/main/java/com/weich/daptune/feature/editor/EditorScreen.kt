@@ -71,6 +71,7 @@ import com.weich.daptune.core.designsystem.VerticalBandSlider
 import com.weich.daptune.core.designsystem.formatFrequency
 import com.weich.daptune.core.designsystem.formatFrequencyWithUnit
 import com.weich.daptune.core.designsystem.formatGain
+import com.weich.daptune.core.designsystem.gainAxisFor
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqProfile
 import kotlinx.coroutines.launch
@@ -324,6 +325,7 @@ private fun BandEditorCard(
     onGainChange: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val axis = remember(curve) { gainAxisFor(curve) }
     AppCard(modifier.fillMaxWidth()) {
         Column {
             Row(
@@ -346,7 +348,7 @@ private fun BandEditorCard(
                     .padding(start = 10.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                GainScale(trackHeight = EqBandTrackHeight)
+                GainScale(axis = axis, trackHeight = EqBandTrackHeight)
                 Spacer(Modifier.width(6.dp))
                 LazyRow(
                     state = listState,
@@ -366,6 +368,7 @@ private fun BandEditorCard(
                             onValueChange = { onGainChange(index, it) },
                             selected = selectedBand == index,
                             onSelected = { onBandSelected(index) },
+                            axis = axis,
                         )
                     }
                 }

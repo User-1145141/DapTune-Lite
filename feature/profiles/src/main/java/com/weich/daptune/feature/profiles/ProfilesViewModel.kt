@@ -81,7 +81,7 @@ class ProfilesViewModel @Inject constructor(
                 Triple(saved, imported.exceedsLimit, imported.warnings)
             }.onSuccess { (saved, adjusted, warnings) ->
                 settingsRepository.setSelectedProfile(saved.id)
-                val adjustment = if (adjusted) "；已按比例压缩到 ±10 dB" else ""
+                val adjustment = if (adjusted) "；已按比例压缩到 +10 dB 上限" else ""
                 val detail = warnings.joinToString(separator = "；", prefix = if (warnings.isEmpty()) "" else "；")
                 messageChannel.send("已导入“${saved.name}”$adjustment$detail")
             }.onFailure { error ->

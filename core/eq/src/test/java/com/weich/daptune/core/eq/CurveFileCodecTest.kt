@@ -33,12 +33,23 @@ class CurveFileCodecTest {
 
     @Test
     fun nativeFormat_roundTripsQ4Exactly() {
-        val curve = EqCurve.ofQ4(List(DapBandPlan.bandCount) { it * 7 - 60 })
+        val curve = EqCurve.ofQ4(List(DapBandPlan.bandCount) { it * 10 - 300 })
         val encoded = CurveFileCodec.exportNative("测试", curve)
 
         val decoded = CurveFileCodec.import(encoded, "test.json")
         val converted = EqTransforms.quantize(decoded.gainsDb, OverflowMode.CLAMP).curve
 
         assertEquals(curve, converted)
+    }
+
+    @Test
+    fun graphicEq_doesNotTreatDeepAttenuationAsOverflow() {
+        val imported = CurveFileCodec.import(
+            "GraphicEQ: 47 -30; 19688 -12",
+            "deep-cut.txt",
+        )
+
+        assertEquals(-30.0, imported.minimumDb, 0.001)
+        assertTrue(!imported.exceedsLimit)
     }
 }

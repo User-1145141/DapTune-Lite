@@ -26,6 +26,9 @@ interface ProfileDao {
     @Upsert
     suspend fun upsertAll(profiles: List<ProfileEntity>)
 
+    @Query("DELETE FROM profiles WHERE builtIn = 1 AND id NOT IN (:currentIds)")
+    suspend fun deleteObsoleteBuiltIns(currentIds: List<String>)
+
     @Delete
     suspend fun delete(profile: ProfileEntity)
 }

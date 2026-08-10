@@ -6,11 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -22,7 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +57,7 @@ import com.weich.daptune.core.model.EqCurve
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 val EqBandTrackHeight = 300.dp
 
@@ -69,6 +68,8 @@ fun EqCurveOverview(
     onBandSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val axis = remember(curve) { gainAxisFor(curve) }
+    val majorTicksQ4 = remember(axis) { axis.majorTicksQ4() }
     val primary = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.outlineVariant
     val zero = MaterialTheme.colorScheme.outline
@@ -80,7 +81,7 @@ fun EqCurveOverview(
     val haptic = LocalHapticFeedback.current
     val textMeasurer = rememberTextMeasurer()
     val currentOnBandSelected by rememberUpdatedState(onBandSelected)
-    val plotStartInset = 30.dp
+    val plotStartInset = 36.dp
     val plotEndInset = 8.dp
     val plotTopInset = 8.dp
     val plotBottomInset = 24.dp
@@ -88,7 +89,7 @@ fun EqCurveOverview(
 
     Canvas(
         modifier = modifier
-            .pointerInput(curve) {
+            .pointerInput(curve, axis) {
                 detectTapGestures { tap ->
                     val startInset = with(density) { plotStartInset.toPx() }
                     val endInset = with(density) { plotEndInset.toPx() }
@@ -106,6 +107,7 @@ fun EqCurveOverview(
                         hitRadiusPx = hitRadius,
                         horizontalEndInsetPx = endInset,
                         verticalEndInsetPx = bottomInset,
+                        axis = axis,
                     )?.let { nearest ->
                         currentOnBandSelected(nearest)
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
@@ -124,24 +126,20 @@ fun EqCurveOverview(
         val plotEndY = size.height - bottomInset
         val plotWidth = (size.width - startInset - endInset).coerceAtLeast(1f)
         val plotHeight = (size.height - topInset - bottomInset).coerceAtLeast(1f)
-        val zeroY = topInset + plotHeight / 2f
+        val zeroY = topInset + plotHeight * axis.fractionFor(0)
 
         fun yFor(gainQ4: Int): Float =
-            topInset + plotHeight * (0.5f - gainQ4.toFloat() / (EqCurve.MAX_GAIN_Q4 * 2f))
+            topInset + plotHeight * axis.fractionFor(gainQ4)
 
-        listOf(10, 5, 0, -5, -10).forEach { db ->
-            val y = yFor(db * EqCurve.Q4_PER_DB)
+        majorTicksQ4.forEach { gainQ4 ->
+            val y = yFor(gainQ4)
             drawLine(
-                color = if (db == 0) zero else grid,
+                color = if (gainQ4 == 0) zero else grid,
                 start = Offset(startInset, y),
                 end = Offset(plotEndX, y),
-                strokeWidth = if (db == 0) 1.25.dp.toPx() else 0.75.dp.toPx(),
+                strokeWidth = if (gainQ4 == 0) 1.25.dp.toPx() else 0.75.dp.toPx(),
             )
-            val label = when {
-                db > 0 -> "+$db"
-                db < 0 -> "−${-db}"
-                else -> "0"
-            }
+            val label = formatAxisGain(gainQ4)
             val labelLayout = textMeasurer.measure(text = label, style = axisStyle)
             drawText(
                 textLayoutResult = labelLayout,
@@ -184,6 +182,7 @@ fun EqCurveOverview(
                 verticalInsetPx = topInset,
                 horizontalEndInsetPx = endInset,
                 verticalEndInsetPx = bottomInset,
+                axis = axis,
             )
         }
         val linePath = Path().apply {
@@ -231,6 +230,8 @@ fun CurveSparkline(
     curve: EqCurve,
     modifier: Modifier = Modifier,
 ) {
+    val axis = remember(curve) { gainAxisFor(curve) }
+    val majorTicksQ4 = remember(axis) { axis.majorTicksQ4() }
     val primary = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.outlineVariant
     val zero = MaterialTheme.colorScheme.outline
@@ -240,15 +241,15 @@ fun CurveSparkline(
         val verticalInset = 3.dp.toPx()
         val plotHeight = (size.height - verticalInset * 2f).coerceAtLeast(1f)
         fun yFor(gainQ4: Int): Float =
-            verticalInset + plotHeight * (0.5f - gainQ4.toFloat() / (EqCurve.MAX_GAIN_Q4 * 2f))
+            verticalInset + plotHeight * axis.fractionFor(gainQ4)
 
-        listOf(10, 5, 0, -5, -10).forEach { db ->
-            val y = yFor(db * EqCurve.Q4_PER_DB)
+        majorTicksQ4.forEach { gainQ4 ->
+            val y = yFor(gainQ4)
             drawLine(
-                color = if (db == 0) zero else grid.copy(alpha = 0.72f),
+                color = if (gainQ4 == 0) zero else grid.copy(alpha = 0.72f),
                 start = Offset(0f, y),
                 end = Offset(size.width, y),
-                strokeWidth = if (db == 0) 1.dp.toPx() else 0.65.dp.toPx(),
+                strokeWidth = if (gainQ4 == 0) 1.dp.toPx() else 0.65.dp.toPx(),
             )
         }
         val points = List(DapBandPlan.bandCount) { index ->
@@ -284,9 +285,11 @@ fun CurveSparkline(
 
 @Composable
 fun GainScale(
+    axis: GainAxis,
     modifier: Modifier = Modifier,
     trackHeight: Dp = EqBandTrackHeight,
 ) {
+    val majorTicksQ4 = remember(axis) { axis.majorTicksQ4() }
     Column(
         modifier = modifier.width(34.dp),
         horizontalAlignment = Alignment.End,
@@ -294,21 +297,18 @@ fun GainScale(
         Spacer(Modifier.height(28.dp))
         Box(
             modifier = Modifier
-                .height(trackHeight)
-                .padding(vertical = 12.dp),
+                .height(trackHeight),
         ) {
-            Column(
-                modifier = Modifier.fillMaxHeight(),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.End,
-            ) {
-                listOf("+10", "+5", "0", "−5", "−10").forEach { label ->
-                    Text(
-                        text = label,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp,
-                    )
-                }
+            majorTicksQ4.forEach { gainQ4 ->
+                val y = 12.dp + (trackHeight - 24.dp) * axis.fractionFor(gainQ4)
+                Text(
+                    text = formatAxisGain(gainQ4),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(y = y - 7.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                )
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -322,6 +322,7 @@ fun VerticalBandSlider(
     onValueChange: (Int) -> Unit,
     selected: Boolean,
     onSelected: () -> Unit,
+    axis: GainAxis,
     modifier: Modifier = Modifier,
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -337,22 +338,27 @@ fun VerticalBandSlider(
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSelected by rememberUpdatedState(onSelected)
     val currentValueQ4 by rememberUpdatedState(valueQ4)
+    val currentAxis by rememberUpdatedState(axis)
+    val majorTicksQ4 = remember(axis) { axis.majorTicksQ4().toSet() }
     val bandInteractionSource = remember { MutableInteractionSource() }
     val thumbInteractionSource = remember { MutableInteractionSource() }
     var lastReportedQ4 by remember { mutableIntStateOf(valueQ4) }
     var dragging by remember { mutableStateOf(false) }
-    var dragY by remember { mutableFloatStateOf(trackHeightPx / 2f) }
+    var dragValueQ4 by remember { mutableDoubleStateOf(valueQ4.toDouble()) }
 
     SideEffect {
-        if (!dragging) lastReportedQ4 = valueQ4
+        if (!dragging) {
+            lastReportedQ4 = valueQ4
+            dragValueQ4 = valueQ4.toDouble()
+        }
     }
 
     fun yFor(gainQ4: Int): Float {
-        return trackYForGainQ4(gainQ4, trackHeightPx, verticalInsetPx)
+        return trackYForGainQ4(gainQ4, trackHeightPx, verticalInsetPx, axis)
     }
 
-    fun update(y: Float) {
-        val snapped = gainQ4ForTrackPosition(y, trackHeightPx, verticalInsetPx)
+    fun update(rawQ4: Double) {
+        val snapped = snapGainQ4(rawQ4.roundToInt())
         if (snapped != lastReportedQ4) {
             lastReportedQ4 = snapped
             haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
@@ -396,23 +402,28 @@ fun VerticalBandSlider(
                 val top = verticalInsetPx
                 val bottom = size.height - verticalInsetPx
                 val usable = bottom - top
-                val zeroY = (top + bottom) / 2f
-                val thumbY = trackYForGainQ4(valueQ4, size.height, verticalInsetPx)
-
-                repeat(41) { index ->
-                    val y = top + usable * index / 40f
+                val zeroY = trackYForGainQ4(0, size.height, verticalInsetPx, axis)
+                val thumbY = trackYForGainQ4(valueQ4, size.height, verticalInsetPx, axis)
+                var tickQ4 = axis.maximumQ4.toLong()
+                var tickIndex = 0
+                while (tickQ4 >= axis.minimumQ4.toLong()) {
+                    val gainQ4 = tickQ4.toInt()
+                    val y = trackYForGainQ4(gainQ4, size.height, verticalInsetPx, axis)
+                    val isMajor = gainQ4 in majorTicksQ4
                     val length = when {
-                        index % 10 == 0 -> 22.dp.toPx()
-                        index % 2 == 0 -> 14.dp.toPx()
+                        isMajor -> 22.dp.toPx()
+                        tickIndex % 2 == 0 -> 14.dp.toPx()
                         else -> 8.dp.toPx()
                     }
                     drawLine(
-                        color = tick.copy(alpha = if (index % 10 == 0) 0.72f else 0.42f),
+                        color = tick.copy(alpha = if (isMajor) 0.72f else 0.42f),
                         start = Offset(centerX - length / 2f, y),
                         end = Offset(centerX + length / 2f, y),
-                        strokeWidth = if (index % 10 == 0) 1.15.dp.toPx() else 0.75.dp.toPx(),
+                        strokeWidth = if (isMajor) 1.15.dp.toPx() else 0.75.dp.toPx(),
                         cap = StrokeCap.Round,
                     )
+                    tickQ4 -= axis.minorStepQ4.toLong()
+                    tickIndex += 1
                 }
                 drawRoundRect(
                     color = inactive,
@@ -432,7 +443,7 @@ fun VerticalBandSlider(
                 drawCircle(primary, 9.dp.toPx(), Offset(centerX, thumbY))
                 drawCircle(onPrimary, 3.25.dp.toPx(), Offset(centerX, thumbY))
             }
-            val thumbY = if (dragging) dragY else yFor(valueQ4)
+            val thumbY = yFor(valueQ4)
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -449,8 +460,9 @@ fun VerticalBandSlider(
                         contentDescription = "$frequencyLabel 均衡器滑块"
                         progressBarRangeInfo = ProgressBarRangeInfo(
                             current = valueQ4.toFloat() / EqCurve.Q4_PER_DB,
-                            range = -10f..10f,
-                            steps = 39,
+                            range = axis.minimumQ4.toFloat() / EqCurve.Q4_PER_DB..
+                                axis.maximumQ4.toFloat() / EqCurve.Q4_PER_DB,
+                            steps = axis.accessibilitySteps,
                         )
                         setProgress { targetDb ->
                             val targetQ4 = snapGainQ4(
@@ -470,7 +482,7 @@ fun VerticalBandSlider(
                         detectDragGestures(
                             onDragStart = {
                                 dragging = true
-                                dragY = yFor(currentValueQ4)
+                                dragValueQ4 = currentValueQ4.toDouble()
                                 currentOnSelected()
                                 haptic.performHapticFeedback(
                                     HapticFeedbackType.GestureThresholdActivate,
@@ -487,9 +499,10 @@ fun VerticalBandSlider(
                             // The 48 dp thumb target owns both axes so a horizontal
                             // movement cannot leak into the surrounding LazyRow.
                             change.consume()
-                            dragY = (dragY + dragAmount.y)
-                                .coerceIn(verticalInsetPx, trackHeightPx - verticalInsetPx)
-                            update(dragY)
+                            val usableHeight = (trackHeightPx - verticalInsetPx * 2f)
+                                .coerceAtLeast(1f)
+                            dragValueQ4 -= dragAmount.y * currentAxis.rangeQ4 / usableHeight
+                            update(dragValueQ4)
                         }
                     },
             )
@@ -537,30 +550,30 @@ fun formatGain(valueQ4: Int): String {
 }
 
 private fun snapGainQ4(valueQ4: Int): Int =
-    ((valueQ4.toFloat() / GainStepQ4).roundToInt() * GainStepQ4)
-        .coerceIn(-EqCurve.MAX_GAIN_Q4, EqCurve.MAX_GAIN_Q4)
+    ((valueQ4.toDouble() / GainStepQ4).roundToLong() * GainStepQ4)
+        .coerceIn(Int.MIN_VALUE.toLong(), EqCurve.MAX_BOOST_Q4.toLong())
+        .toInt()
 
 internal fun gainQ4ForTrackPosition(
     yPx: Float,
     trackHeightPx: Float,
     verticalInsetPx: Float,
+    axis: GainAxis,
 ): Int {
     val usable = (trackHeightPx - verticalInsetPx * 2f).coerceAtLeast(1f)
     val fraction = ((yPx - verticalInsetPx) / usable).coerceIn(0f, 1f)
-    val raw = ((0.5f - fraction) * EqCurve.MAX_GAIN_Q4 * 2f).roundToInt()
-    return snapGainQ4(raw)
+    val raw = axis.maximumQ4.toDouble() - fraction * axis.rangeQ4
+    return snapGainQ4(raw.roundToInt()).coerceAtLeast(axis.minimumQ4)
 }
 
 internal fun trackYForGainQ4(
     gainQ4: Int,
     trackHeightPx: Float,
     verticalInsetPx: Float,
+    axis: GainAxis,
 ): Float {
     val usable = (trackHeightPx - verticalInsetPx * 2f).coerceAtLeast(1f)
-    val normalizedGain = gainQ4
-        .coerceIn(-EqCurve.MAX_GAIN_Q4, EqCurve.MAX_GAIN_Q4)
-        .toFloat() / (EqCurve.MAX_GAIN_Q4 * 2f)
-    return trackHeightPx / 2f - normalizedGain * usable
+    return verticalInsetPx + usable * axis.fractionFor(gainQ4)
 }
 
 internal fun nearestCurveBandAt(
@@ -574,6 +587,7 @@ internal fun nearestCurveBandAt(
     hitRadiusPx: Float,
     horizontalEndInsetPx: Float = horizontalInsetPx,
     verticalEndInsetPx: Float = verticalInsetPx,
+    axis: GainAxis = gainAxisFor(curve),
 ): Int? {
     val nearest = (0 until DapBandPlan.bandCount).minByOrNull { index ->
         val point = curvePointForBand(
@@ -585,6 +599,7 @@ internal fun nearestCurveBandAt(
             verticalInsetPx = verticalInsetPx,
             horizontalEndInsetPx = horizontalEndInsetPx,
             verticalEndInsetPx = verticalEndInsetPx,
+            axis = axis,
         )
         hypot(tapX - point.x, tapY - point.y)
     } ?: return null
@@ -597,6 +612,7 @@ internal fun nearestCurveBandAt(
         verticalInsetPx = verticalInsetPx,
         horizontalEndInsetPx = horizontalEndInsetPx,
         verticalEndInsetPx = verticalEndInsetPx,
+        axis = axis,
     )
     return nearest.takeIf { hypot(tapX - point.x, tapY - point.y) <= hitRadiusPx }
 }
@@ -610,14 +626,14 @@ private fun curvePointForBand(
     verticalInsetPx: Float,
     horizontalEndInsetPx: Float = horizontalInsetPx,
     verticalEndInsetPx: Float = verticalInsetPx,
+    axis: GainAxis = gainAxisFor(curve),
 ): Offset {
     val plotWidth = (widthPx - horizontalInsetPx - horizontalEndInsetPx).coerceAtLeast(1f)
     val plotHeight = (heightPx - verticalInsetPx - verticalEndInsetPx).coerceAtLeast(1f)
     return Offset(
         x = horizontalInsetPx + plotWidth * index / (DapBandPlan.bandCount - 1),
-        y = verticalInsetPx +
-            plotHeight * (0.5f - curve[index].toFloat() / (EqCurve.MAX_GAIN_Q4 * 2f)),
+        y = verticalInsetPx + plotHeight * axis.fractionFor(curve[index]),
     )
 }
 
-private const val GainStepQ4 = EqCurve.Q4_PER_DB / 2
+private fun formatAxisGain(valueQ4: Int): String = formatGain(valueQ4).replace('-', '−')

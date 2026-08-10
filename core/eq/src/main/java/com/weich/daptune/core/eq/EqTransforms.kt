@@ -2,11 +2,13 @@ package com.weich.daptune.core.eq
 
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqCurve
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 enum class OverflowMode {
+    /** Scale the entire curve when its positive peak exceeds +10 dB. */
     FIT,
+
+    /** Clamp only values above +10 dB; attenuation remains unchanged. */
     CLAMP,
 }
 
@@ -25,9 +27,15 @@ object EqTransforms {
     }
 
     fun peakToZero(curve: EqCurve): EqCurve {
-        val gains = curve.toDbList()
-        val peak = gains.max()
-        return quantize(gains.map { it - peak }, OverflowMode.FIT).curve
+        val gainsQ4 = curve.toQ4List()
+        val peakQ4 = gainsQ4.max()
+        return EqCurve.ofQ4(
+            gainsQ4.map { gainQ4 ->
+                (gainQ4.toLong() - peakQ4.toLong())
+                    .coerceAtLeast(Int.MIN_VALUE.toLong())
+                    .toInt()
+            },
+        )
     }
 
     fun meanToZero(curve: EqCurve): EqCurve {
@@ -45,7 +53,7 @@ object EqTransforms {
     }
 
     fun invert(curve: EqCurve): EqCurve =
-        EqCurve.ofQ4(curve.toQ4Array().map { -it })
+        quantize(curve.toDbList().map { -it }, OverflowMode.FIT).curve
 
     fun smooth(curve: EqCurve, passes: Int = 1): EqCurve {
         require(passes in 1..8)
@@ -71,15 +79,15 @@ object EqTransforms {
 
         val minimum = gainsDb.min()
         val maximum = gainsDb.max()
-        val limit = EqCurve.MAX_GAIN_DB.toDouble()
-        val exceedsLimit = minimum < -limit || maximum > limit
+        val limit = EqCurve.MAX_BOOST_DB.toDouble()
+        val exceedsLimit = maximum > limit
         val adjusted = if (!exceedsLimit) {
             gainsDb
         } else {
             when (overflowMode) {
-                OverflowMode.CLAMP -> gainsDb.map { it.coerceIn(-limit, limit) }
+                OverflowMode.CLAMP -> gainsDb.map { it.coerceAtMost(limit) }
                 OverflowMode.FIT -> {
-                    val factor = limit / maxOf(abs(minimum), abs(maximum))
+                    val factor = limit / maximum
                     gainsDb.map { it * factor }
                 }
             }
@@ -88,7 +96,7 @@ object EqTransforms {
         val q4 = adjusted.map { gain ->
             (gain * EqCurve.Q4_PER_DB)
                 .roundToInt()
-                .coerceIn(-EqCurve.MAX_GAIN_Q4, EqCurve.MAX_GAIN_Q4)
+                .coerceAtMost(EqCurve.MAX_BOOST_Q4)
         }
         return CurveConversion(
             curve = EqCurve.ofQ4(q4),
