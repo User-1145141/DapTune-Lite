@@ -15,7 +15,9 @@ import com.weich.daptune.domain.AudioRouteMonitor
 import com.weich.daptune.domain.DapGateway
 import com.weich.daptune.domain.DeviceRepository
 import com.weich.daptune.domain.ProfileRepository
+import com.weich.daptune.domain.ResolveProfileForRouteUseCase
 import com.weich.daptune.domain.SaveProfileUseCase
+import com.weich.daptune.domain.SelectProfileForRouteUseCase
 import com.weich.daptune.domain.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -65,7 +67,8 @@ sealed interface EditorEvent {
 
 private data class EditorSources(
     val profiles: List<EqProfile>,
-    val selectedProfileId: String,
+    val resolvedProfile: EqProfile?,
+    val storedSelectedProfileId: String,
     val route: OutputRoute,
     val snapshot: AppliedSnapshot?,
 )
@@ -78,7 +81,9 @@ class EditorViewModel @Inject constructor(
     private val routeMonitor: AudioRouteMonitor,
     private val dapGateway: DapGateway,
     private val applyCurve: ApplyCurveUseCase,
+    private val resolveProfileForRoute: ResolveProfileForRouteUseCase,
     private val saveProfile: SaveProfileUseCase,
+    private val selectProfileForRoute: SelectProfileForRouteUseCase,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState())
     val state: StateFlow<EditorUiState> = mutableState
@@ -92,17 +97,35 @@ class EditorViewModel @Inject constructor(
             combine(
                 profileRepository.profiles,
                 settingsRepository.settings,
+                deviceRepository.bindings,
                 routeMonitor.routes,
                 deviceRepository.appliedSnapshot,
-            ) { profiles, settings, route, snapshot ->
-                EditorSources(profiles, settings.selectedProfileId, route, snapshot)
-            }.collect(::updateSources)
+            ) { profiles, settings, _, _, snapshot ->
+                // The StateFlow has a speaker placeholder while route discovery settles.
+                // Resolve once from the platform so the editor never loads that placeholder.
+                val route = routeMonitor.currentRoute()
+                EditorSources(
+                    profiles = profiles,
+                    resolvedProfile = resolveProfileForRoute(route),
+                    storedSelectedProfileId = settings.selectedProfileId,
+                    route = route,
+                    snapshot = snapshot,
+                )
+            }.collect { sources ->
+                updateSources(sources)
+                deviceRepository.rememberRoute(sources.route)
+                sources.resolvedProfile
+                    ?.id
+                    ?.takeIf { it != sources.storedSelectedProfileId }
+                    ?.let { settingsRepository.setSelectedProfile(it) }
+            }
         }
         refreshCapability()
     }
 
     fun selectProfile(profileId: String) {
         val profile = mutableState.value.profiles.firstOrNull { it.id == profileId } ?: return
+        val route = mutableState.value.route
         mutableState.update {
             it.copy(
                 selectedProfileId = profile.id,
@@ -111,7 +134,10 @@ class EditorViewModel @Inject constructor(
                 originalCurve = profile.curve,
             )
         }
-        viewModelScope.launch { settingsRepository.setSelectedProfile(profile.id) }
+        viewModelScope.launch {
+            runCatching { selectProfileForRoute(profile.id, route) }
+                .onFailure { eventChannel.send(EditorEvent.Message(it.message ?: "无法更新设备配置")) }
+        }
     }
 
     fun selectBand(index: Int) {
@@ -158,7 +184,7 @@ class EditorViewModel @Inject constructor(
                         ?: ProfileSource.MANUAL,
                 )
             }.onSuccess { saved ->
-                settingsRepository.setSelectedProfile(saved.id)
+                selectProfileForRoute(saved.id, current.route)
                 mutableState.update {
                     it.copy(
                         selectedProfileId = saved.id,
@@ -216,7 +242,8 @@ class EditorViewModel @Inject constructor(
 
     private fun updateSources(sources: EditorSources) {
         mutableState.update { current ->
-            val selected = sources.profiles.firstOrNull { it.id == sources.selectedProfileId }
+            val selected = sources.resolvedProfile
+                ?: sources.profiles.firstOrNull { it.id == "builtin.flat" }
                 ?: sources.profiles.firstOrNull()
             val selectionChanged = selected != null && current.loadedProfileId != selected.id
             if (selectionChanged) {
@@ -238,6 +265,5 @@ class EditorViewModel @Inject constructor(
                 )
             }
         }
-        viewModelScope.launch { deviceRepository.rememberRoute(sources.route) }
     }
 }

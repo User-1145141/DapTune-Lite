@@ -132,22 +132,7 @@ fun ProfilesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionHeading("内置")
-            }
-            items(
-                items = state.builtIns,
-                key = EqProfile::id,
-            ) { profile ->
-                ProfileCard(
-                    profile = profile,
-                    selected = profile.id == state.selectedProfileId,
-                    onClick = { viewModel.select(profile) },
-                    onDuplicate = { viewModel.duplicate(profile) },
-                    onDelete = null,
-                )
-            }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionHeading("我的配置", modifier = Modifier.padding(top = 8.dp))
+                SectionHeading("我的配置")
             }
             if (state.userProfiles.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -176,6 +161,21 @@ fun ProfilesScreen(
                         onDelete = { deleting = profile },
                     )
                 }
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeading("内置", modifier = Modifier.padding(top = 8.dp))
+            }
+            items(
+                items = state.builtIns,
+                key = EqProfile::id,
+            ) { profile ->
+                ProfileCard(
+                    profile = profile,
+                    selected = profile.id == state.selectedProfileId,
+                    onClick = { viewModel.select(profile) },
+                    onDuplicate = { viewModel.duplicate(profile) },
+                    onDelete = null,
+                )
             }
         }
     }

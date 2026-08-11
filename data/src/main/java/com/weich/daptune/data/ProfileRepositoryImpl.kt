@@ -5,6 +5,7 @@ import com.weich.daptune.core.eq.BuiltInPresets
 import com.weich.daptune.core.model.EqCurve
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.ProfileSource
+import com.weich.daptune.core.model.withCustomProfilesFirst
 import com.weich.daptune.domain.ProfileRepository
 import java.util.UUID
 import javax.inject.Inject
@@ -17,7 +18,7 @@ class ProfileRepositoryImpl @Inject constructor(
     private val profileDao: ProfileDao,
 ) : ProfileRepository {
     override val profiles: Flow<List<EqProfile>> = profileDao.observeAll().map { entities ->
-        entities.map { entity -> entity.toModel() }
+        entities.map { entity -> entity.toModel() }.withCustomProfilesFirst()
     }
 
     override suspend fun ensureBuiltIns() {

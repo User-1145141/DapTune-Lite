@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ProfileDao {
-    @Query("SELECT * FROM profiles ORDER BY builtIn DESC, sortOrder ASC, name COLLATE NOCASE ASC")
+    @Query("SELECT * FROM profiles ORDER BY builtIn ASC, sortOrder ASC, name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<ProfileEntity>>
 
     @Query("SELECT * FROM profiles WHERE id = :id LIMIT 1")

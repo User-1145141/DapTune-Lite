@@ -377,16 +377,6 @@ private fun ProfileSelectionDialog(
             LazyColumn(
                 modifier = Modifier.heightIn(max = 344.dp),
             ) {
-                if (allowFollowDefault) {
-                    item {
-                        ProfileChoiceRow(
-                            name = "跟随默认 · $defaultProfileName",
-                            selected = selectedId == null,
-                            onClick = { onSelect(null) },
-                        )
-                    }
-                    item { HorizontalDivider() }
-                }
                 items(
                     items = profiles,
                     key = EqProfile::id,
@@ -396,6 +386,16 @@ private fun ProfileSelectionDialog(
                         selected = selectedId == profile.id,
                         onClick = { onSelect(profile.id) },
                     )
+                }
+                if (allowFollowDefault) {
+                    item { HorizontalDivider() }
+                    item {
+                        ProfileChoiceRow(
+                            name = "跟随默认 · $defaultProfileName",
+                            selected = selectedId == null,
+                            onClick = { onSelect(null) },
+                        )
+                    }
                 }
             }
         },

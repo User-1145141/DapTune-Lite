@@ -4,10 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.weich.daptune.core.eq.OverflowMode
 import com.weich.daptune.core.model.EqProfile
+import com.weich.daptune.core.model.OutputRoute
+import com.weich.daptune.domain.AudioRouteMonitor
+import com.weich.daptune.domain.DeviceRepository
 import com.weich.daptune.domain.DuplicateProfileUseCase
 import com.weich.daptune.domain.ImportCurveUseCase
 import com.weich.daptune.domain.ProfileRepository
+import com.weich.daptune.domain.ResolveProfileForRouteUseCase
 import com.weich.daptune.domain.SaveProfileUseCase
+import com.weich.daptune.domain.SelectProfileForRouteUseCase
 import com.weich.daptune.domain.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -21,6 +26,7 @@ import kotlinx.coroutines.launch
 data class ProfilesUiState(
     val profiles: List<EqProfile> = emptyList(),
     val selectedProfileId: String = "builtin.flat",
+    val currentRoute: OutputRoute = OutputRoute.Speaker,
 ) {
     val builtIns: List<EqProfile> get() = profiles.filter(EqProfile::isBuiltIn)
     val userProfiles: List<EqProfile> get() = profiles.filterNot(EqProfile::isBuiltIn)
@@ -33,6 +39,10 @@ class ProfilesViewModel @Inject constructor(
     private val duplicateProfile: DuplicateProfileUseCase,
     private val importCurve: ImportCurveUseCase,
     private val saveProfile: SaveProfileUseCase,
+    private val deviceRepository: DeviceRepository,
+    private val routeMonitor: AudioRouteMonitor,
+    private val resolveProfileForRoute: ResolveProfileForRouteUseCase,
+    private val selectProfileForRoute: SelectProfileForRouteUseCase,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ProfilesUiState())
     val state: StateFlow<ProfilesUiState> = mutableState
@@ -42,21 +52,34 @@ class ProfilesViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             profileRepository.ensureBuiltIns()
-            combine(profileRepository.profiles, settingsRepository.settings) { profiles, settings ->
-                ProfilesUiState(profiles, settings.selectedProfileId)
+            combine(
+                profileRepository.profiles,
+                settingsRepository.settings,
+                deviceRepository.bindings,
+                routeMonitor.routes,
+            ) { profiles, settings, _, _ ->
+                val route = routeMonitor.currentRoute()
+                val selectedProfileId = resolveProfileForRoute(route)?.id
+                    ?: settings.selectedProfileId
+                ProfilesUiState(profiles, selectedProfileId, route)
             }.collect(mutableState::emit)
         }
     }
 
     fun select(profile: EqProfile) {
-        viewModelScope.launch { settingsRepository.setSelectedProfile(profile.id) }
+        val route = mutableState.value.currentRoute
+        viewModelScope.launch {
+            runCatching { selectProfileForRoute(profile.id, route) }
+                .onFailure { messageChannel.send(it.message ?: "无法更新设备配置") }
+        }
     }
 
     fun duplicate(profile: EqProfile) {
+        val route = mutableState.value.currentRoute
         viewModelScope.launch {
             runCatching { duplicateProfile(profile, profile.name) }
                 .onSuccess { copy ->
-                    settingsRepository.setSelectedProfile(copy.id)
+                    selectProfileForRoute(copy.id, route)
                     messageChannel.send("已创建“${copy.name}”")
                 }
                 .onFailure { messageChannel.send(it.message ?: "复制失败") }
@@ -68,6 +91,7 @@ class ProfilesViewModel @Inject constructor(
         fileName: String,
         overflowMode: OverflowMode = OverflowMode.FIT,
     ) {
+        val route = mutableState.value.currentRoute
         viewModelScope.launch {
             runCatching {
                 val imported = importCurve.parse(text, fileName)
@@ -80,7 +104,7 @@ class ProfilesViewModel @Inject constructor(
                 )
                 Triple(saved, imported.exceedsLimit, imported.warnings)
             }.onSuccess { (saved, adjusted, warnings) ->
-                settingsRepository.setSelectedProfile(saved.id)
+                selectProfileForRoute(saved.id, route)
                 val adjustment = if (adjusted) "；已按比例压缩到 +10 dB 上限" else ""
                 val detail = warnings.joinToString(separator = "；", prefix = if (warnings.isEmpty()) "" else "；")
                 messageChannel.send("已导入“${saved.name}”$adjustment$detail")
@@ -92,11 +116,13 @@ class ProfilesViewModel @Inject constructor(
 
     fun delete(profile: EqProfile) {
         if (profile.isBuiltIn) return
+        val route = mutableState.value.currentRoute
+        val wasSelected = mutableState.value.selectedProfileId == profile.id
         viewModelScope.launch {
             runCatching { profileRepository.deleteProfile(profile.id) }
                 .onSuccess {
-                    if (mutableState.value.selectedProfileId == profile.id) {
-                        settingsRepository.setSelectedProfile("builtin.flat")
+                    if (wasSelected) {
+                        selectProfileForRoute("builtin.flat", route)
                     }
                     messageChannel.send("已删除“${profile.name}”")
                 }

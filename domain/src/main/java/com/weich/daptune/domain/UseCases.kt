@@ -87,6 +87,24 @@ class ResolveProfileForRouteUseCase @Inject constructor(
     }
 }
 
+/**
+ * Selects a profile for editing and makes that same profile the explicit rule
+ * for the output route the user is currently configuring.
+ *
+ * The binding is written first so automation can never observe a new editor
+ * selection together with the route's previous rule.
+ */
+class SelectProfileForRouteUseCase @Inject constructor(
+    private val deviceRepository: DeviceRepository,
+    private val settingsRepository: SettingsRepository,
+) {
+    suspend operator fun invoke(profileId: String, route: OutputRoute) {
+        deviceRepository.rememberRoute(route)
+        deviceRepository.bind(route.key, profileId)
+        settingsRepository.setSelectedProfile(profileId)
+    }
+}
+
 class SaveProfileUseCase @Inject constructor(
     private val profileRepository: ProfileRepository,
 ) {
