@@ -7,18 +7,29 @@ data class DapCapability(
     val dapEnabled: Boolean,
     val profileCount: Int,
     val currentProfile: Int,
+    val curveReadbackSupport: DapCurveReadbackSupport,
     val detail: String? = null,
 ) {
     val isReady: Boolean
         get() = descriptorFound && hasControl && effectEnabled && dapEnabled && profileCount > 0
 }
 
+enum class DapCurveReadbackSupport {
+    SUPPORTED,
+    UNAVAILABLE,
+}
+
 data class DapApplyReceipt(
     val profileCount: Int,
     val currentProfile: Int,
-    val verified: Boolean,
+    val verification: DapApplyVerification,
     val curveHash: Int,
 )
+
+enum class DapApplyVerification {
+    CURVE_READBACK,
+    WRITE_ACCEPTED,
+}
 
 sealed interface DapApplyResult {
     data class Success(val receipt: DapApplyReceipt) : DapApplyResult

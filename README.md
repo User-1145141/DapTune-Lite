@@ -12,12 +12,12 @@ DSP 写入参数 110（`GraphicEqualizerBandGains`），不处理 PCM、不录�
 - 导入 DapTune JSON、GraphicEQ、Equalizer APO/AutoEq 参数均衡器、CSV/TSV
 - 超限曲线等比压缩或裁切；提供峰值归零、均值归零、平滑、反相等处理
 - 按手机扬声器、有线耳机、具体蓝牙/LE Audio、USB 和 HDMI 输出自动切换
-- 写入全部 Dolby profile 后逐一回读；验证失败会恢复原始曲线
+- 自动识别 DAP 协议能力：代理型 DAP 写后逐一回读并可回滚，直连 DAP_offload 按厂商 setter-only 语义写入
 
 ## 权限与兼容性
 
-已验证目标为 Xiaomi 14 Pro（`shennong`）、Android 16 / API 36，DAP implementation UUID 为
-`9d4921da-8225-4f29-aefa-39537a04bcaa`。应用启动时会检测能力，不匹配时拒绝写入。
+已验证的 DAP implementation UUID 为 `9d4921da-8225-4f29-aefa-39537a04bcaa`。应用启动时会检测
+descriptor、运行状态和曲线回读能力，不匹配时拒绝写入；兼容分支依据 effect type，而非设备型号白名单。
 
 在已验证的系统上不需要 root、LSPosed 或常驻 shell。应用通过 Android `AudioEffect` 的全局混音
 session 调用厂商 DAP；HiddenApiBypass 仅用于访问系统未公开但设备已提供的构造和参数接口。

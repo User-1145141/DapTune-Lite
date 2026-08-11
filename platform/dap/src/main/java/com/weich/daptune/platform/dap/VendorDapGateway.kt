@@ -3,7 +3,9 @@ package com.weich.daptune.platform.dap
 import android.media.audiofx.AudioEffect
 import com.weich.daptune.core.model.DapApplyReceipt
 import com.weich.daptune.core.model.DapApplyResult
+import com.weich.daptune.core.model.DapApplyVerification
 import com.weich.daptune.core.model.DapCapability
+import com.weich.daptune.core.model.DapCurveReadbackSupport
 import com.weich.daptune.core.model.DapFailureReason
 import com.weich.daptune.core.model.EqCurve
 import com.weich.daptune.domain.DapGateway
@@ -24,18 +26,18 @@ class VendorDapGateway @Inject constructor() : DapGateway {
     private val transactionMutex = Mutex()
 
     override suspend fun inspect(): DapCapability = withContext(Dispatchers.IO) {
-        val descriptorFound = runCatching {
-            AudioEffect.queryEffects()?.any { it.uuid == DapImplementationUuid } == true
-        }.getOrDefault(false)
-        if (!descriptorFound) return@withContext DapCapability(
+        val descriptor = runCatching { findDapDescriptor() }.getOrNull()
+        if (descriptor == null) return@withContext DapCapability(
             descriptorFound = false,
             hasControl = false,
             effectEnabled = false,
             dapEnabled = false,
             profileCount = 0,
             currentProfile = -1,
+            curveReadbackSupport = DapCurveReadbackSupport.UNAVAILABLE,
             detail = "未找到兼容的 Dolby DAP",
         )
+        val readbackSupport = DapDescriptorPolicy.curveReadbackSupport(descriptor.type, descriptor.name)
         var effect: AudioEffect? = null
         try {
             val api = bridge()
@@ -47,6 +49,7 @@ class VendorDapGateway @Inject constructor() : DapGateway {
                 dapEnabled = api.queryInt(effect, DapProtocol.commandGetDapOn) > 0,
                 profileCount = api.queryInt(effect, DapProtocol.commandGetProfileCount),
                 currentProfile = api.queryInt(effect, DapProtocol.commandGetCurrentProfile),
+                curveReadbackSupport = readbackSupport,
             )
         } catch (error: Throwable) {
             DapCapability(
@@ -56,6 +59,7 @@ class VendorDapGateway @Inject constructor() : DapGateway {
                 dapEnabled = false,
                 profileCount = 0,
                 currentProfile = -1,
+                curveReadbackSupport = readbackSupport,
                 detail = describe(unwrap(error)),
             )
         } finally {
@@ -69,6 +73,13 @@ class VendorDapGateway @Inject constructor() : DapGateway {
                 runCatching {
                     var effect: AudioEffect? = null
                     try {
+                        val descriptor = requireNotNull(findDapDescriptor()) {
+                            "未找到兼容的 Dolby DAP"
+                        }
+                        check(
+                            DapDescriptorPolicy.curveReadbackSupport(descriptor.type, descriptor.name) ==
+                                DapCurveReadbackSupport.SUPPORTED,
+                        ) { "当前 DAP 仅支持写入，不提供曲线回读" }
                         val api = bridge()
                         effect = api.open()
                         require(effect.hasControl()) { "DAP 控制权被其他客户端占用" }
@@ -90,11 +101,16 @@ class VendorDapGateway @Inject constructor() : DapGateway {
     private fun applyCurveBlocking(curve: EqCurve): DapApplyResult {
         var effect: AudioEffect? = null
         var originals: List<IntArray> = emptyList()
-        var writesStarted = false
+        var readbackSupport = DapCurveReadbackSupport.UNAVAILABLE
+        var profileCount = 0
+        var writesCompleted = 0
+        var saveCompleted = false
         return try {
-            if (AudioEffect.queryEffects()?.none { it.uuid == DapImplementationUuid } != false) {
+            val descriptor = findDapDescriptor()
+            if (descriptor == null) {
                 return DapApplyResult.Failure(DapFailureReason.UNSUPPORTED, "未找到兼容的 Dolby DAP")
             }
+            readbackSupport = DapDescriptorPolicy.curveReadbackSupport(descriptor.type, descriptor.name)
             val api = bridge()
             effect = api.open()
             if (!effect.hasControl()) {
@@ -103,46 +119,89 @@ class VendorDapGateway @Inject constructor() : DapGateway {
             if (!effect.enabled || api.queryInt(effect, DapProtocol.commandGetDapOn) <= 0) {
                 return DapApplyResult.Failure(DapFailureReason.DOLBY_DISABLED, "杜比全景声已关闭")
             }
-            val profileCount = api.queryInt(effect, DapProtocol.commandGetProfileCount)
+            profileCount = api.queryInt(effect, DapProtocol.commandGetProfileCount)
             if (profileCount !in 1..MaxProfileCount) {
                 return DapApplyResult.Failure(
                     DapFailureReason.INVALID_STATE,
                     "无效的 Dolby profile 数量：$profileCount",
                 )
             }
-            originals = List(profileCount) { profile -> api.readProfileCurve(effect, profile) }
             val target = curve.toQ4Array()
-            writesStarted = true
-            repeat(profileCount) { profile -> api.writeProfileCurve(effect, profile, target) }
+            if (readbackSupport == DapCurveReadbackSupport.SUPPORTED) {
+                originals = List(profileCount) { profile -> api.readProfileCurve(effect, profile) }
+            }
 
-            val mismatch = (0 until profileCount).firstOrNull { profile ->
-                !api.readProfileCurve(effect, profile).contentEquals(target)
+            repeat(profileCount) { profile ->
+                api.writeProfileCurve(effect, profile, target)
+                writesCompleted++
             }
-            if (mismatch != null) {
-                rollback(api, effect, originals)
-                return DapApplyResult.Failure(
-                    DapFailureReason.VERIFICATION_FAILED,
-                    "Profile $mismatch 回读不一致，已恢复原设置",
-                )
+
+            if (readbackSupport == DapCurveReadbackSupport.SUPPORTED) {
+                val mismatch = (0 until profileCount).firstOrNull { profile ->
+                    !api.readProfileCurve(effect, profile).contentEquals(target)
+                }
+                if (mismatch != null) {
+                    rollback(api, effect, originals)
+                    return DapApplyResult.Failure(
+                        DapFailureReason.VERIFICATION_FAILED,
+                        "Profile $mismatch 回读不一致，已恢复原设置",
+                    )
+                }
             }
+
             api.saveSettings(effect)
+            saveCompleted = true
             val currentProfile = api.queryInt(effect, DapProtocol.commandGetCurrentProfile)
+            if (readbackSupport == DapCurveReadbackSupport.UNAVAILABLE) {
+                val postProfileCount = api.queryInt(effect, DapProtocol.commandGetProfileCount)
+                val dapStillEnabled = api.queryInt(effect, DapProtocol.commandGetDapOn) > 0
+                if (
+                    !effect.hasControl() || !effect.enabled || !dapStillEnabled ||
+                    postProfileCount != profileCount || currentProfile !in 0 until profileCount
+                ) {
+                    return DapApplyResult.Failure(
+                        DapFailureReason.INVALID_STATE,
+                        "写入和保存命令已发送，但 DAP 状态在操作后发生变化；设备不支持曲线回读，无法确认最终曲线",
+                    )
+                }
+            }
             DapApplyResult.Success(
                 DapApplyReceipt(
                     profileCount = profileCount,
                     currentProfile = currentProfile,
-                    verified = true,
+                    verification = when (readbackSupport) {
+                        DapCurveReadbackSupport.SUPPORTED -> DapApplyVerification.CURVE_READBACK
+                        DapCurveReadbackSupport.UNAVAILABLE -> DapApplyVerification.WRITE_ACCEPTED
+                    },
                     curveHash = curve.stableHash(),
                 ),
             )
         } catch (error: Throwable) {
             val cause = unwrap(error)
-            if (writesStarted && effect != null && originals.isNotEmpty()) {
+            val rollbackResult = if (
+                writesCompleted > 0 && effect != null && originals.isNotEmpty() &&
+                readbackSupport == DapCurveReadbackSupport.SUPPORTED
+            ) {
                 runCatching { rollback(bridge(), effect, originals) }
+            } else {
+                null
             }
             DapApplyResult.Failure(
                 reason = failureReason(cause),
-                detail = describe(cause),
+                detail = buildString {
+                    append(describe(cause))
+                    when {
+                        rollbackResult?.isSuccess == true -> append("；已恢复原设置")
+                        rollbackResult?.isFailure == true -> append("；恢复原设置失败")
+                        writesCompleted > 0 && readbackSupport == DapCurveReadbackSupport.UNAVAILABLE -> {
+                            if (saveCompleted) {
+                                append("；写入和保存命令已发送，但设备不支持曲线回读，最终曲线无法确认")
+                            } else {
+                                append("；已写入 $writesCompleted/$profileCount 个 profile，设备不支持回读，无法自动恢复")
+                            }
+                        }
+                    }
+                },
                 cause = cause,
             )
         } finally {
@@ -154,6 +213,9 @@ class VendorDapGateway @Inject constructor() : DapGateway {
         originals.forEachIndexed { profile, curve -> api.writeProfileCurve(effect, profile, curve) }
         api.saveSettings(effect)
     }
+
+    private fun findDapDescriptor(): AudioEffect.Descriptor? =
+        AudioEffect.queryEffects()?.firstOrNull { it.uuid == DapImplementationUuid }
 
     private fun bridge(): Bridge {
         BridgeInstance?.let { return it }

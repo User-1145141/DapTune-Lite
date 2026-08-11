@@ -67,6 +67,7 @@ data class AppliedSnapshot(
 
 enum class VerificationState {
     VERIFIED,
+    WRITE_ACCEPTED,
     STALE,
     FAILED,
 }

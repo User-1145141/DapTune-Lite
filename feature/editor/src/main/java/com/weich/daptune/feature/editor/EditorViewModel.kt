@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.weich.daptune.core.eq.EqTransforms
 import com.weich.daptune.core.model.AppliedSnapshot
 import com.weich.daptune.core.model.DapApplyResult
+import com.weich.daptune.core.model.DapApplyVerification
 import com.weich.daptune.core.model.DapCapability
 import com.weich.daptune.core.model.EqCurve
 import com.weich.daptune.core.model.EqProfile
@@ -222,9 +223,7 @@ class EditorViewModel @Inject constructor(
             )
             mutableState.update { it.copy(isApplying = false) }
             when (result) {
-                is DapApplyResult.Success -> eventChannel.send(
-                    EditorEvent.Message("已写入并验证 ${result.receipt.profileCount} 个 Dolby 配置"),
-                )
+                is DapApplyResult.Success -> eventChannel.send(EditorEvent.Message(result.successMessage()))
                 is DapApplyResult.Failure -> eventChannel.send(EditorEvent.Message(result.detail))
             }
             refreshCapability()
@@ -266,4 +265,11 @@ class EditorViewModel @Inject constructor(
             }
         }
     }
+}
+
+private fun DapApplyResult.Success.successMessage(): String = when (receipt.verification) {
+    DapApplyVerification.CURVE_READBACK ->
+        "已写入并验证 ${receipt.profileCount} 个 Dolby 配置"
+    DapApplyVerification.WRITE_ACCEPTED ->
+        "已写入 ${receipt.profileCount} 个 Dolby 配置 · 此设备不支持曲线回读"
 }

@@ -5,6 +5,7 @@ import com.weich.daptune.core.eq.ImportedCurve
 import com.weich.daptune.core.eq.OverflowMode
 import com.weich.daptune.core.eq.EqTransforms
 import com.weich.daptune.core.model.AppliedSnapshot
+import com.weich.daptune.core.model.DapApplyVerification
 import com.weich.daptune.core.model.DapApplyResult
 import com.weich.daptune.core.model.EqCurve
 import com.weich.daptune.core.model.EqProfile
@@ -34,11 +35,7 @@ class ApplyProfileUseCase @Inject constructor(
                     profileId = profile.id,
                     curveHash = profile.curve.stableHash(),
                     appliedAtEpochMillis = System.currentTimeMillis(),
-                    verification = if (result.receipt.verified) {
-                        VerificationState.VERIFIED
-                    } else {
-                        VerificationState.STALE
-                    },
+                    verification = result.receipt.verification.toSnapshotVerification(),
                 ),
             )
             is DapApplyResult.Failure -> deviceRepository.markAppliedStateStale()
@@ -64,13 +61,18 @@ class ApplyCurveUseCase @Inject constructor(
                     profileId = profileId,
                     curveHash = curve.stableHash(),
                     appliedAtEpochMillis = System.currentTimeMillis(),
-                    verification = VerificationState.VERIFIED,
+                    verification = result.receipt.verification.toSnapshotVerification(),
                 ),
             )
             is DapApplyResult.Failure -> deviceRepository.markAppliedStateStale()
         }
         return result
     }
+}
+
+internal fun DapApplyVerification.toSnapshotVerification(): VerificationState = when (this) {
+    DapApplyVerification.CURVE_READBACK -> VerificationState.VERIFIED
+    DapApplyVerification.WRITE_ACCEPTED -> VerificationState.WRITE_ACCEPTED
 }
 
 class ResolveProfileForRouteUseCase @Inject constructor(
