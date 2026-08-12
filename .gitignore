@@ -9,3 +9,6 @@ captures/
 *.jks
 *.keystore
 keystore.properties
+signing.properties
+*.pem
+*.p12

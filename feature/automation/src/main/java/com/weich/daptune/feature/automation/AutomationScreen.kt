@@ -5,8 +5,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,19 +26,28 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BluetoothAudio
+import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PowerSettingsNew
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.SettingsInputHdmi
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Speaker
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Usb
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +58,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +66,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,6 +84,13 @@ import com.weich.daptune.core.designsystem.DapTuneTopAppBar
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.KnownOutputDevice
 import com.weich.daptune.core.model.OutputRouteType
+import com.weich.daptune.core.model.OperationLogAction
+import com.weich.daptune.core.model.OperationLogEntry
+import com.weich.daptune.core.model.OperationLogOutcome
+import com.weich.daptune.core.model.VerificationState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private sealed interface ProfilePickerTarget {
     data object Default : ProfilePickerTarget
@@ -87,6 +108,8 @@ fun AutomationScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     var pickerTarget by remember { mutableStateOf<ProfilePickerTarget?>(null) }
+    var forgetTarget by remember { mutableStateOf<KnownOutputDevice?>(null) }
+    var showOperationLogs by rememberSaveable { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> viewModel.onNotificationPermissionResult(granted) }
@@ -105,6 +128,18 @@ fun AutomationScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect(snackbar::showSnackbar)
+    }
+
+    BackHandler(enabled = showOperationLogs) { showOperationLogs = false }
+
+    if (showOperationLogs) {
+        OperationLogScreen(
+            logs = state.operationLogs,
+            onBack = { showOperationLogs = false },
+            onClear = viewModel::clearOperationLogs,
+            modifier = modifier,
+        )
+        return
     }
 
     val visibleDevices = remember(state.devices, state.currentRoute) {
@@ -161,8 +196,8 @@ fun AutomationScreen(
                         )
                         SettingsDivider()
                         ListItem(
-                            headlineContent = { Text("开机后自动启动") },
-                            supportingContent = { Text("设备重启后继续运行自动切换") },
+                            headlineContent = { Text("重启后恢复自动切换") },
+                            supportingContent = { Text("设备重启后无需打开应用即可继续运行") },
                             leadingContent = {
                                 Icon(Icons.Outlined.PowerSettingsNew, contentDescription = null)
                             },
@@ -232,9 +267,12 @@ fun AutomationScreen(
                                 assignedProfile = assigned,
                                 defaultProfile = state.defaultProfile,
                                 isCurrent = device.route.key == state.currentRoute.key,
+                                canForget = device.route.key != state.currentRoute.key &&
+                                    device.route.type != OutputRouteType.BUILT_IN_SPEAKER,
                                 onClick = {
                                     pickerTarget = ProfilePickerTarget.Device(device)
                                 },
+                                onForgetRequest = { forgetTarget = device },
                             )
                             if (index != visibleDevices.lastIndex) SettingsDivider()
                         }
@@ -258,6 +296,45 @@ fun AutomationScreen(
                         "系统音效若覆盖曲线，下一次播放设备事件会重新应用规则。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            item { SectionHeading("记录", modifier = Modifier.padding(top = 4.dp)) }
+            item {
+                AppCard(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth(),
+                ) {
+                    ListItem(
+                        headlineContent = { Text("操作记录") },
+                        supportingContent = {
+                            Text(
+                                text = state.operationLogs.firstOrNull()?.let(::operationLogSummary)
+                                    ?: "暂无记录",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        leadingContent = {
+                            Icon(Icons.Outlined.History, contentDescription = null)
+                        },
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (state.operationLogs.isNotEmpty()) {
+                                    Text(
+                                        text = state.operationLogs.size.toString(),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                                Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                            }
+                        },
+                        modifier = Modifier.clickable { showOperationLogs = true },
+                        colors = transparentListItemColors(),
                     )
                 }
             }
@@ -288,7 +365,242 @@ fun AutomationScreen(
             },
         )
     }
+
+    forgetTarget?.let { device ->
+        AlertDialog(
+            onDismissRequest = { forgetTarget = null },
+            title = { Text("忘记设备？") },
+            text = {
+                Text("将从设备历史中移除“${device.route.displayName}”及其自动切换规则。再次连接后，它会作为新设备重新出现。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.forget(device.route.key, device.route.displayName)
+                        forgetTarget = null
+                    },
+                ) {
+                    Text(
+                        text = "忘记",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { forgetTarget = null }) { Text("取消") }
+            },
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OperationLogScreen(
+    logs: List<OperationLogEntry>,
+    onBack: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var confirmClear by remember { mutableStateOf(false) }
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("操作记录") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { confirmClear = true },
+                        enabled = logs.isNotEmpty(),
+                    ) {
+                        Icon(Icons.Outlined.DeleteSweep, contentDescription = "清空记录")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                ),
+            )
+        },
+    ) { padding ->
+        if (logs.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    Icons.Outlined.History,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "暂无记录",
+                    modifier = Modifier.padding(top = 12.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = padding.calculateTopPadding() + 4.dp,
+                    bottom = padding.calculateBottomPadding() + 20.dp,
+                ),
+            ) {
+                items(
+                    items = logs,
+                    key = OperationLogEntry::id,
+                ) { entry ->
+                    OperationLogRow(entry)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 72.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
+            }
+        }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("清空操作记录？") },
+            text = { Text("现有记录将被永久删除。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClear()
+                        confirmClear = false
+                    },
+                ) {
+                    Text("清空", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun OperationLogRow(entry: OperationLogEntry) {
+    val failed = entry.outcome == OperationLogOutcome.FAILURE
+    ListItem(
+        headlineContent = {
+            Text(
+                text = operationLogTitle(entry),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = operationLogDetail(entry)?.let { detail ->
+            {
+                Text(
+                    text = detail,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        leadingContent = {
+            Icon(
+                imageVector = if (failed) {
+                    Icons.Outlined.ErrorOutline
+                } else {
+                    Icons.Outlined.CheckCircleOutline
+                },
+                contentDescription = null,
+                tint = if (failed) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
+        },
+        trailingContent = {
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = LogDateFormatter.format(
+                        Instant.ofEpochMilli(entry.occurredAtEpochMillis)
+                            .atZone(ZoneId.systemDefault()),
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = LogTimeFormatter.format(
+                        Instant.ofEpochMilli(entry.occurredAtEpochMillis)
+                            .atZone(ZoneId.systemDefault()),
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.background,
+        ),
+    )
+}
+
+private fun operationLogSummary(entry: OperationLogEntry): String =
+    "${LogCompactFormatter.format(Instant.ofEpochMilli(entry.occurredAtEpochMillis).atZone(ZoneId.systemDefault()))} · " +
+        operationLogTitle(entry)
+
+private fun operationLogTitle(entry: OperationLogEntry): String {
+    val profile = entry.profileName?.let { " · $it" }.orEmpty()
+    val base = when (entry.action) {
+        OperationLogAction.UNKNOWN -> "未知操作"
+        OperationLogAction.AUTOMATION_ENABLED -> "开启自动切换"
+        OperationLogAction.AUTOMATION_DISABLED -> "关闭自动切换"
+        OperationLogAction.START_AT_BOOT_ENABLED -> "启用重启后恢复"
+        OperationLogAction.START_AT_BOOT_DISABLED -> "停用重启后恢复"
+        OperationLogAction.AUTOMATION_STARTED -> "启动恢复$profile"
+        OperationLogAction.AUTOMATION_RECOVERED -> "后台恢复$profile"
+        OperationLogAction.AUTOMATION_START_FAILED -> "自动切换启动"
+        OperationLogAction.ROUTE_CHANGED -> "设备切换$profile"
+        OperationLogAction.DOLBY_RESTORED -> "杜比状态恢复$profile"
+        OperationLogAction.AUTOMATION_REFRESHED -> "重新应用$profile"
+        OperationLogAction.PROFILE_SELECTED -> "切换配置$profile"
+        OperationLogAction.DEFAULT_RULE_CHANGED -> "默认配置$profile"
+        OperationLogAction.DEVICE_RULE_CHANGED ->
+            if (entry.profileName == null) "设备规则 · 跟随默认" else "设备规则$profile"
+        OperationLogAction.CURVE_APPLIED -> "应用当前曲线"
+        OperationLogAction.DEVICE_FORGOTTEN -> "忘记设备"
+    }
+    return if (entry.outcome == OperationLogOutcome.FAILURE && !base.endsWith("失败")) {
+        "${base}失败"
+    } else {
+        base
+    }
+}
+
+private fun operationLogDetail(entry: OperationLogEntry): String? = buildList {
+    entry.routeName?.let(::add)
+    when (entry.verification) {
+        VerificationState.VERIFIED -> add("回读验证通过")
+        VerificationState.WRITE_ACCEPTED -> add("写入已接受")
+        VerificationState.STALE -> add("状态待确认")
+        VerificationState.FAILED -> add("验证失败")
+        null -> Unit
+    }
+    entry.detail?.takeIf(String::isNotBlank)?.let(::add)
+}.takeIf(List<String>::isNotEmpty)?.joinToString(" · ")
+
+private val LogDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+private val LogTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+private val LogCompactFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")
 
 @Composable
 private fun SectionHeading(
@@ -317,9 +629,12 @@ private fun DeviceRuleRow(
     assignedProfile: EqProfile?,
     defaultProfile: EqProfile?,
     isCurrent: Boolean,
+    canForget: Boolean,
     onClick: () -> Unit,
+    onForgetRequest: () -> Unit,
 ) {
     val ruleLabel = assignedProfile?.name ?: "跟随默认 · ${defaultProfile?.name ?: "平直"}"
+    var menuExpanded by remember(device.route.key) { mutableStateOf(false) }
     ListItem(
         headlineContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -353,7 +668,36 @@ private fun DeviceRuleRow(
             )
         },
         trailingContent = {
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+            if (canForget) {
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Outlined.MoreVert,
+                            contentDescription = "设备操作",
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("忘记设备") },
+                            onClick = {
+                                menuExpanded = false
+                                onForgetRequest()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.DeleteOutline,
+                                    contentDescription = null,
+                                )
+                            },
+                        )
+                    }
+                }
+            } else {
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+            }
         },
         modifier = Modifier.clickable(onClick = onClick),
         colors = transparentListItemColors(),

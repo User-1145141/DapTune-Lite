@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/silverpoetry/DapTune/main/docs/schema/daptune-profile-v1.schema.json",
+  "title": "DapTune profile v1",
+  "description": "A lossless DapTune Dolby DAP 20-band equalizer profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "name",
+    "band_plan",
+    "frequencies_hz",
+    "gains_q4"
+  ],
+  "properties": {
+    "format": {
+      "const": "com.weich.daptune.profile",
+      "description": "File-format discriminator."
+    },
+    "version": {
+      "const": 1,
+      "description": "DapTune profile-file version."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$",
+      "x-daptune-max-utf16-code-units": 40,
+      "description": "Canonical profile name: no leading/trailing whitespace and at most 40 UTF-16 code units."
+    },
+    "band_plan": {
+      "const": "dolby-dap-20-v1",
+      "description": "Identifier of the fixed Dolby DAP frequency plan."
+    },
+    "frequencies_hz": {
+      "const": [
+        47,
+        141,
+        234,
+        328,
+        469,
+        656,
+        844,
+        1031,
+        1313,
+        1688,
+        2250,
+        3000,
+        3750,
+        4688,
+        5813,
+        7125,
+        9000,
+        11250,
+        13875,
+        19688
+      ],
+      "description": "The exact, ordered center frequencies required by band_plan."
+    },
+    "gains_q4": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "items": {
+        "type": "integer",
+        "minimum": -2147483648,
+        "maximum": 160
+      },
+      "description": "Signed Q4 dB gains in frequency order; dB = Q4 / 16."
+    }
+  }
+}

@@ -61,6 +61,10 @@ class DeviceRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun forgetRoute(routeKey: String) {
+        deviceDao.forgetDevice(routeKey)
+    }
+
     override suspend fun bind(routeKey: String, profileId: String?) {
         if (profileId == null) {
             deviceDao.deleteBinding(routeKey)

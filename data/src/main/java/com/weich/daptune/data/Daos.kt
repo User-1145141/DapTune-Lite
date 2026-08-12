@@ -2,7 +2,9 @@ package com.weich.daptune.data
 
 import androidx.room.Dao
 import androidx.room.Delete
+import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -52,6 +54,19 @@ interface DeviceDao {
 
     @Query("DELETE FROM device_bindings WHERE routeKey = :routeKey")
     suspend fun deleteBinding(routeKey: String)
+
+    @Query("DELETE FROM known_devices WHERE routeKey = :routeKey")
+    suspend fun deleteKnownDevice(routeKey: String)
+
+    @Query("DELETE FROM applied_state WHERE routeKey = :routeKey")
+    suspend fun deleteAppliedState(routeKey: String)
+
+    @Transaction
+    suspend fun forgetDevice(routeKey: String) {
+        deleteBinding(routeKey)
+        deleteAppliedState(routeKey)
+        deleteKnownDevice(routeKey)
+    }
 }
 
 @Dao
@@ -64,4 +79,32 @@ interface AppliedStateDao {
 
     @Upsert
     suspend fun upsert(state: AppliedStateEntity)
+}
+
+@Dao
+interface OperationLogDao {
+    @Query(
+        "SELECT * FROM operation_logs " +
+            "ORDER BY occurredAtEpochMillis DESC, id DESC LIMIT :limit",
+    )
+    fun observeRecent(limit: Int): Flow<List<OperationLogEntity>>
+
+    @Insert
+    suspend fun insert(entry: OperationLogEntity)
+
+    @Query(
+        "DELETE FROM operation_logs WHERE id NOT IN (" +
+            "SELECT id FROM operation_logs " +
+            "ORDER BY occurredAtEpochMillis DESC, id DESC LIMIT :maxEntries)",
+    )
+    suspend fun prune(maxEntries: Int)
+
+    @Query("DELETE FROM operation_logs")
+    suspend fun clear()
+
+    @Transaction
+    suspend fun insertBounded(entry: OperationLogEntity, maxEntries: Int) {
+        insert(entry)
+        prune(maxEntries)
+    }
 }

@@ -1,0 +1,96 @@
+# 故障排查
+
+先保存 DapTune 日志中最小且已经脱敏的证据。不要公开完整 `dumpsys`、厂商 APK、蓝牙地址、设备序列号、
+IP、账户信息或签名材料。
+
+## 显示“未找到兼容的 Dolby DAP”
+
+1. 确认系统确实包含并能开启 Dolby 全景声；
+2. 重启音频服务或设备后再打开 DapTune；
+3. 检查系统更新是否更换 effect implementation UUID；
+4. 对照[兼容性条件](compatibility.md)，不要仅凭设备型号判断；
+5. 若 UUID 不同，提交最小 descriptor 信息，而不是整份系统转储。
+
+DapTune 不会在普通 Android 均衡器、非 Xiaomi Dolby 实现或已被厂商移除的 DAP 上回退到软件 EQ。
+
+## 显示“杜比全景声已关闭”
+
+DapTune 不控制 Dolby 开关。先在系统音效页面开启；部分输出、通话模式或省电状态会让系统临时关闭
+DAP。自动切换服务会监听已知的小米 Dolby 状态广播，在恢复后重新应用曲线。
+
+## 显示“音效控制权被占用”
+
+另一个客户端可能在同时操作全局 DAP。关闭系统音效设置页和其他均衡器应用，等待播放路径稳定后重试。
+不要让多个应用高频抢写同一全局 effect。
+
+## 应用成功，但听起来完全一样
+
+按顺序缩小范围：
+
+1. 使用一条容易辨认的衰减测试曲线，而不是 0.5 dB 小改动；
+2. 保持播放器、曲目、音量、输出设备完全相同；
+3. 用系统自带或已知经过 Dolby 的播放器对照；
+4. 关闭播放器的 direct/offload、独占 USB、低延迟或自带 EQ；
+5. 在播放器设置中切换解码器、AudioTrack/AAudio 方式或音频输出优先级；
+6. 重新插拔输出，查看 DapTune 日志识别到的路由和验证等级。
+
+一个播放器无效而 Bilibili 等另一个播放器有效，通常说明前者走了不同的 AudioTrack 或硬件输出路径，
+不是 20 段 payload 没写入。切换播放器的输出顺序后立刻生效也支持这一判断。
+
+## USB 有线耳机无效
+
+USB 音频可能由独立 ALSA/USB handler 直接发送给 DAC，绕过平台 Dolby DSP。普通 3.5 mm 有线耳机与
+USB DAC 是不同路由，不应因为界面都显示“有线”而假定处理链相同。
+
+只有 Xiaomi `turner` 的已知固件实验可参考
+[`daptune-usb-dsp-offload`](../tools/magisk/daptune-usb-dsp-offload)。该模块只覆盖
+`persist.vendor.audio.usb.offload=true`，必须有 Magisk/KernelSU 和可靠恢复方式。属性变为 `true`
+本身不证明成功；播放时仍要验证 handler 确实进入 DSP 路线。其他产品禁止直接套用。
+
+## 切换配置后主页仍显示旧曲线
+
+确认当前路由与配置页操作时的路由相同。选择配置会先更新该路由的明确绑定，再立即应用并更新选择状态；
+如果硬件暂时不可用，规则仍会保留，下一次路由事件重试。若界面状态没有同步：
+
+1. 记录当前设备名、配置名和操作时间；
+2. 切到其他底部页面再返回，确认不是截图或转场残留；
+3. 查看日志中是否出现 `PROFILE_SELECTED` 和对应路由；
+4. 提交可复现步骤及脱敏日志。
+
+## 划掉最近任务后不再自动切换
+
+保持“自动切换”开启，并在系统中允许自启动、后台运行和不受电量限制。DapTune 使用一个由系统持有的
+短延时恢复请求处理任务卡片被移除的情况，不使用轮询、第二进程或多层兜底。厂商的“强制停止”、一键
+清理或极端省电仍可能禁止任何恢复；重新打开应用会恢复用户已开启的服务。
+
+若 Android 13+ 拒绝通知权限，前台服务在 AOSP 上仍可运行，但通知抽屉不会显示通知。请在系统“活动
+应用”界面和 DapTune 日志中判断服务，而不是只看通知栏。
+
+## 导入失败或曲线不对
+
+- 原生 JSON：用 [Schema](schema/daptune-profile-v1.schema.json)和
+  [v1 规范](daptune-json-format.md)核对全部字段；
+- GraphicEQ：只能有一条曲线，不能混入参数滤波器；
+- ParametricEQ：确认类型、`Fc`、`Gain`、`Q` 和 `Channel: all`；
+- CSV：确认表头让解析器选择 `equalization` 或 `gain`，不要把测量列当目标；
+- 超过 `+10 dB`：区分等比适配和单独裁切；低于 `-10 dB` 不会被当作溢出。
+
+完整行为见[导入格式](import-formats.md)。可在源码仓库运行：
+
+```powershell
+node .\tools\validate-profile-contract.mjs
+.\gradlew.bat --no-daemon :core:eq:testDebugUnitTest
+```
+
+## 提交问题前
+
+提供：
+
+- DapTune 版本和 APK 来源；
+- Android 版本、设备代号和固件版本；
+- 输出类型、播放器和是否启用 offload/独占模式；
+- 期望曲线、实际结果和最短复现步骤；
+- 应用日志中对应时间段的脱敏条目；
+- 是否能在另一个已知经过 Dolby 的播放器复现。
+
+安全问题使用 GitHub 私密漏洞报告，不要开公开 Issue。普通兼容性问题使用仓库 Issue 模板。

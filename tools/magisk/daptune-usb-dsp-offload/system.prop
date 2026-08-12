@@ -1,0 +1,3 @@
+# The stock turner product configuration explicitly sets this to false.
+# Magisk/KernelSU applies this as a runtime overlay; /vendor is not modified.
+persist.vendor.audio.usb.offload=true

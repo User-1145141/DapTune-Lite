@@ -88,6 +88,7 @@ fun EditorScreen(
     val scope = rememberCoroutineScope()
     val bandListState = rememberLazyListState()
     var showTools by remember { mutableStateOf(false) }
+    var showThresholdLimit by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(viewModel) {
@@ -193,9 +194,9 @@ fun EditorScreen(
                 viewModel.transform(CurveAction.SMOOTH)
                 showTools = false
             }
-            CurveToolItem("反相", "交换提升与衰减") {
-                viewModel.transform(CurveAction.INVERT)
+            CurveToolItem("阈值限制", "将高于指定值的增益压平") {
                 showTools = false
+                showThresholdLimit = true
             }
             CurveToolItem("全部归零", "恢复平直曲线") {
                 viewModel.transform(CurveAction.FLATTEN)
@@ -203,6 +204,16 @@ fun EditorScreen(
             }
             Spacer(Modifier.height(28.dp))
         }
+    }
+
+    if (showThresholdLimit) {
+        ThresholdLimitDialog(
+            onDismiss = { showThresholdLimit = false },
+            onConfirm = { thresholdDb ->
+                viewModel.limitMaximum(thresholdDb)
+                showThresholdLimit = false
+            },
+        )
     }
 
     saveName?.let { suggestion ->
@@ -220,6 +231,52 @@ fun EditorScreen(
             },
         )
     }
+}
+
+@Composable
+private fun ThresholdLimitDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit,
+) {
+    var input by remember { mutableStateOf("0") }
+    val threshold = input.replace(',', '.').toDoubleOrNull()?.takeIf(Double::isFinite)
+    val error = when {
+        threshold == null -> "请输入有效数值"
+        threshold > com.weich.daptune.core.model.EqCurve.MAX_BOOST_DB ->
+            "不能高于 +${com.weich.daptune.core.model.EqCurve.MAX_BOOST_DB} dB"
+        else -> null
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("阈值限制") },
+        text = {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { value ->
+                    if (value.length <= 12 && value.all { it.isDigit() || it in "+-.," }) {
+                        input = value
+                    }
+                },
+                label = { Text("最大增益") },
+                suffix = { Text("dB") },
+                supportingText = {
+                    Text(error ?: "高于此值的频段将被直接压平")
+                },
+                isError = error != null,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { threshold?.let(onConfirm) },
+                enabled = error == null,
+            ) { Text("应用") }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

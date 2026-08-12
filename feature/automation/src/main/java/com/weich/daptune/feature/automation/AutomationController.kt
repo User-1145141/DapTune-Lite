@@ -10,22 +10,18 @@ import javax.inject.Singleton
 @Singleton
 class AutomationController @Inject constructor(
     @param:ApplicationContext private val context: Context,
+    private val recoveryScheduler: AutomationRecoveryScheduler,
 ) {
     fun start() {
         ContextCompat.startForegroundService(
             context,
             Intent(context, EqAutomationService::class.java).setAction(EqAutomationService.ActionStart),
         )
+        recoveryScheduler.onAutomationStarted()
     }
 
     fun stop() {
+        recoveryScheduler.onAutomationStopped()
         context.stopService(Intent(context, EqAutomationService::class.java))
-    }
-
-    fun refresh() {
-        ContextCompat.startForegroundService(
-            context,
-            Intent(context, EqAutomationService::class.java).setAction(EqAutomationService.ActionRefresh),
-        )
     }
 }

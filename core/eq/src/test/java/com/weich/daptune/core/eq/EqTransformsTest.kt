@@ -74,4 +74,51 @@ class EqTransformsTest {
         assertEquals(-30.0, conversion.curve.gainDb(0), 0.0)
         assertEquals(10.0, conversion.curve.gainDb(1), 0.0)
     }
+
+    @Test
+    fun limitMaximum_flattensOnlyValuesAboveThreshold() {
+        val source = EqCurve.ofQ4(
+            List(DapBandPlan.bandCount) { index ->
+                when (index) {
+                    0 -> -320
+                    1 -> -8
+                    2 -> 16
+                    else -> 80
+                }
+            },
+        )
+
+        val result = EqTransforms.limitMaximum(source, 1.0)
+
+        assertEquals(-320, result[0])
+        assertEquals(-8, result[1])
+        assertEquals(16, result[2])
+        assertTrue(result.toQ4List().drop(2).all { it == 16 })
+    }
+
+    @Test
+    fun limitMaximum_acceptsNegativeThresholdWithoutAddingAttenuationFloor() {
+        val source = EqCurve.ofQ4(List(DapBandPlan.bandCount) { index -> (index - 10) * 16 })
+
+        val result = EqTransforms.limitMaximum(source, -3.5)
+
+        assertEquals(-160, result[0])
+        assertTrue(result.toQ4List().drop(7).all { it == -56 })
+    }
+
+    @Test
+    fun limitMaximum_q4ValueNeverExceedsRequestedThreshold() {
+        val result = EqTransforms.limitMaximum(
+            EqCurve.ofQ4(List(DapBandPlan.bandCount) { 16 }),
+            0.1,
+        )
+
+        assertEquals(1, result.toQ4List().max())
+        assertTrue(result.toDbList().max() <= 0.1)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun limitMaximum_rejectsThresholdAboveDolbyLimit() {
+        EqTransforms.limitMaximum(EqCurve.flat(), 10.1)
+    }
 }

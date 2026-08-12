@@ -29,11 +29,21 @@ data class ImportedCurve(
 class CurveImportException(message: String, cause: Throwable? = null) :
     IllegalArgumentException(message, cause)
 
+/** Explicit values bypass detection and are never silently parsed as another format. */
+enum class CurveImportFormat {
+    AUTOMATIC,
+    DAPTUNE_JSON,
+    GRAPHIC_EQ,
+    PARAMETRIC_EQ,
+    FREQUENCY_GAIN_TABLE,
+}
+
 object CurveFileCodec {
+    const val MAX_IMPORT_CHARACTERS: Int = 1_000_000
+
     private const val FileFormat = "com.weich.daptune.profile"
     private const val FileVersion = 1
     private const val DefaultSampleRate = 48_000.0
-    private const val MaxCharacters = 1_000_000
 
     private val json = Json {
         prettyPrint = true
@@ -41,17 +51,21 @@ object CurveFileCodec {
         explicitNulls = false
     }
 
-    fun import(text: String, fileName: String): ImportedCurve {
-        require(text.length <= MaxCharacters) { "文件过大" }
+    fun import(
+        text: String,
+        fileName: String,
+        format: CurveImportFormat = CurveImportFormat.AUTOMATIC,
+    ): ImportedCurve {
+        require(text.length <= MAX_IMPORT_CHARACTERS) { "文件过大" }
         val normalized = text.removePrefix("\uFEFF").trim()
         if (normalized.isEmpty()) throw CurveImportException("文件为空")
         return try {
-            when {
-                normalized.startsWith("{") -> importNative(normalized, fileName)
-                graphicEqLines(normalized).isNotEmpty() -> importGraphicEq(normalized, fileName)
-                normalized.lineSequence().any { activeFilterRegex.containsMatchIn(it) } ->
-                    importParametricEq(normalized, fileName)
-                else -> importDelimited(normalized, fileName)
+            when (format.takeUnless { it == CurveImportFormat.AUTOMATIC } ?: detectFormat(normalized)) {
+                CurveImportFormat.AUTOMATIC -> error("Automatic format must be resolved")
+                CurveImportFormat.DAPTUNE_JSON -> importNative(normalized, fileName)
+                CurveImportFormat.GRAPHIC_EQ -> importGraphicEq(normalized, fileName)
+                CurveImportFormat.PARAMETRIC_EQ -> importParametricEq(normalized, fileName)
+                CurveImportFormat.FREQUENCY_GAIN_TABLE -> importDelimited(normalized, fileName)
             }
         } catch (error: CurveImportException) {
             throw error
@@ -60,14 +74,34 @@ object CurveFileCodec {
         }
     }
 
-    fun exportNative(name: String, curve: EqCurve): String = json.encodeToString(
-        ProfileFileDto(
-            name = name,
-            bandPlan = DapBandPlan.id,
-            frequenciesHz = DapBandPlan.frequenciesHz.asList(),
-            gainsQ4 = curve.toQ4List(),
-        ),
-    )
+    private fun detectFormat(text: String): CurveImportFormat = when {
+        text.startsWith("{") -> CurveImportFormat.DAPTUNE_JSON
+        graphicEqLines(text).isNotEmpty() -> CurveImportFormat.GRAPHIC_EQ
+        text.lineSequence().any { rawLine ->
+            val line = stripComment(rawLine)
+            filterDirectiveRegex.containsMatchIn(line) ||
+                line.startsWith("Preamp", ignoreCase = true) ||
+                line.startsWith("Channel", ignoreCase = true) ||
+                unsupportedProcessingDirectiveRegex.containsMatchIn(line)
+        } -> CurveImportFormat.PARAMETRIC_EQ
+        else -> CurveImportFormat.FREQUENCY_GAIN_TABLE
+    }
+
+    fun exportNative(name: String, curve: EqCurve): String {
+        require(isCanonicalProfileName(name)) {
+            "Profile name must contain 1–$MaxProfileNameLength characters without surrounding whitespace"
+        }
+        return json.encodeToString(
+            ProfileFileDto(
+                format = FileFormat,
+                version = FileVersion,
+                name = name,
+                bandPlan = DapBandPlan.id,
+                frequenciesHz = DapBandPlan.frequenciesHz.asList(),
+                gainsQ4 = curve.toQ4List(),
+            ),
+        )
+    }
 
     fun exportGraphicEq(curve: EqCurve): String = buildString {
         append("GraphicEQ: ")
@@ -88,13 +122,17 @@ object CurveFileCodec {
         if (dto.bandPlan != DapBandPlan.id || dto.frequenciesHz != DapBandPlan.frequenciesHz.asList()) {
             throw CurveImportException("文件使用了不兼容的频点")
         }
+        val profileName = dto.name.trim()
+        if (!isCanonicalProfileName(dto.name)) {
+            throw CurveImportException("配置名称必须为 1–$MaxProfileNameLength 个字符")
+        }
         val curve = try {
             EqCurve.ofQ4(dto.gainsQ4)
         } catch (error: IllegalArgumentException) {
             throw CurveImportException("文件中的正增益超过 +${EqCurve.MAX_BOOST_DB} dB", error)
         }
         return ImportedCurve(
-            suggestedName = dto.name.ifBlank { baseName(fileName) },
+            suggestedName = profileName,
             gainsDb = curve.toDbList(),
             source = ProfileSource.DAPTUNE_FILE,
         )
@@ -103,8 +141,9 @@ object CurveFileCodec {
     private fun importGraphicEq(text: String, fileName: String): ImportedCurve {
         val lines = graphicEqLines(text)
         if (lines.size != 1) throw CurveImportException("文件必须只包含一条 GraphicEQ 曲线")
+        validateRepresentableDirectives(text, allowGraphicEq = true)
         val payload = lines.single().substringAfter(':')
-        val points = payload.split(';').mapIndexed { index, token ->
+        val points = payload.split(';').map(String::trim).filter(String::isNotEmpty).mapIndexed { index, token ->
             val values = token.trim().split(Regex("\\s+")).filter(String::isNotBlank)
             if (values.size != 2) throw CurveImportException("GraphicEQ 第 ${index + 1} 个频点格式错误")
             FrequencyGain(
@@ -126,13 +165,14 @@ object CurveFileCodec {
     private fun importParametricEq(text: String, fileName: String): ImportedCurve {
         val filters = mutableListOf<Biquad>()
         text.lineSequence().forEachIndexed { index, rawLine ->
-            val line = rawLine.substringBefore('#').trim()
+            val line = stripComment(rawLine)
             if (line.isEmpty() || line.startsWith("Preamp", ignoreCase = true)) return@forEachIndexed
+            validateRepresentableDirective(line, index + 1, allowGraphicEq = false)
             if (!line.startsWith("Filter", ignoreCase = true)) return@forEachIndexed
             if (Regex("(?i):\\s*OFF\\b").containsMatchIn(line)) return@forEachIndexed
             val match = activeFilterRegex.find(line)
                 ?: throw CurveImportException("第 ${index + 1} 行包含不支持的滤波器")
-            val type = match.groupValues[1].uppercase()
+            val type = match.groupValues[1].uppercase().removeSuffix("C")
             val frequency = match.groupValues[2].toDouble()
             val gain = match.groupValues[3].toDouble()
             val q = match.groupValues[4].takeIf(String::isNotBlank)?.toDouble() ?: DEFAULT_Q
@@ -141,10 +181,13 @@ object CurveFileCodec {
             }
             filters += Biquad.create(type, frequency, gain, q, DefaultSampleRate)
         }
-        if (filters.isEmpty() && !preampRegex.containsMatchIn(text)) {
+        val preamp = parsePreamp(text)
+        val hasPreamp = text.lineSequence()
+            .map(::stripComment)
+            .any { it.startsWith("Preamp", ignoreCase = true) }
+        if (filters.isEmpty() && !hasPreamp) {
             throw CurveImportException("没有找到可用的参数均衡器滤波器")
         }
-        val preamp = parsePreamp(text)
         val gains = DapBandPlan.frequenciesHz.map { frequency ->
             preamp + filters.sumOf { it.magnitudeDb(frequency.toDouble(), DefaultSampleRate) }
         }
@@ -157,24 +200,30 @@ object CurveFileCodec {
     }
 
     private fun importDelimited(text: String, fileName: String): ImportedCurve {
-        val points = mutableListOf<FrequencyGain>()
-        text.lineSequence().forEachIndexed { index, rawLine ->
-            val line = rawLine.substringBefore('#').trim()
-            if (line.isEmpty()) return@forEachIndexed
-            val values = line.split(Regex("[,\\t\\s]+"))
-                .map(String::trim)
-                .filter(String::isNotBlank)
-            if (values.size < 2) {
-                if (index == 0) return@forEachIndexed
-                throw CurveImportException("第 ${index + 1} 行需要频率和增益")
+        val rows = text.lineSequence().mapIndexedNotNull { index, rawLine ->
+            val line = stripComment(rawLine)
+            if (line.isEmpty() || line.startsWith("//") || line.startsWith("*")) {
+                null
+            } else {
+                TableRow(index + 1, splitTableRow(line))
             }
-            val frequency = values[0].toDoubleOrNull()
-            val gain = values[1].toDoubleOrNull()
-            if (frequency == null || gain == null) {
-                if (index == 0) return@forEachIndexed
-                throw CurveImportException("第 ${index + 1} 行不是有效数字")
+        }.toList()
+        if (rows.isEmpty()) throw CurveImportException("没有找到频率和增益数据")
+
+        val firstRow = rows.first()
+        val hasHeader = firstRow.values.any { it.toDoubleOrNull() == null }
+        val columns = if (hasHeader) resolveTableColumns(firstRow) else TableColumns(0, 1)
+        val dataRows = if (hasHeader) rows.drop(1) else rows
+        val requiredColumn = maxOf(columns.frequency, columns.gain)
+        val points = dataRows.map { row ->
+            if (row.values.size <= requiredColumn) {
+                throw CurveImportException("第 ${row.lineNumber} 行缺少频率或增益")
             }
-            points += FrequencyGain(frequency, gain)
+            val frequency = row.values[columns.frequency].toDoubleOrNull()
+                ?: throw CurveImportException("第 ${row.lineNumber} 行的频率不是有效数字")
+            val gain = row.values[columns.gain].toDoubleOrNull()
+                ?: throw CurveImportException("第 ${row.lineNumber} 行的增益不是有效数字")
+            FrequencyGain(frequency, gain)
         }
         validatePoints(points)
         return ImportedCurve(
@@ -217,11 +266,17 @@ object CurveFileCodec {
         }
     }
 
-    private fun parsePreamp(text: String): Double =
-        preampRegex.find(text)?.groupValues?.get(1)?.toDouble() ?: 0.0
+    private fun parsePreamp(text: String): Double = text.lineSequence()
+        .mapIndexedNotNull { index, rawLine ->
+            val line = stripComment(rawLine)
+            if (!line.startsWith("Preamp", ignoreCase = true)) return@mapIndexedNotNull null
+            preampLineRegex.matchEntire(line)?.groupValues?.get(1)?.toDouble()
+                ?: throw CurveImportException("第 ${index + 1} 行的 Preamp 格式无效")
+        }
+        .sum()
 
     private fun graphicEqLines(text: String): List<String> = text.lineSequence()
-        .map { it.substringBefore('#').trim() }
+        .map(::stripComment)
         .filter { it.startsWith("GraphicEQ", ignoreCase = true) && ':' in it }
         .toList()
 
@@ -236,6 +291,74 @@ object CurveFileCodec {
         .trim()
         .ifBlank { "导入配置" }
 
+    private fun isCanonicalProfileName(name: String): Boolean =
+        name == name.trim() && name.isNotEmpty() && name.length <= MaxProfileNameLength
+
+    private fun stripComment(line: String): String = line.substringBefore('#').trim()
+
+    private fun validateRepresentableDirectives(text: String, allowGraphicEq: Boolean) {
+        text.lineSequence().forEachIndexed { index, rawLine ->
+            validateRepresentableDirective(stripComment(rawLine), index + 1, allowGraphicEq)
+        }
+    }
+
+    private fun validateRepresentableDirective(
+        line: String,
+        lineNumber: Int,
+        allowGraphicEq: Boolean,
+    ) {
+        if (line.isEmpty()) return
+        if (line.startsWith("Channel", ignoreCase = true)) {
+            if (!allChannelsRegex.matches(line)) {
+                throw CurveImportException("第 $lineNumber 行使用了无法映射的分声道处理")
+            }
+            return
+        }
+        if (line.startsWith("Preamp", ignoreCase = true)) return
+        if (filterDirectiveRegex.containsMatchIn(line) && allowGraphicEq) {
+            throw CurveImportException("不能把 GraphicEQ 与参数滤波器混合转换")
+        }
+        if (graphicEqDirectiveRegex.containsMatchIn(line) && !allowGraphicEq) {
+            throw CurveImportException("不能把参数滤波器与 GraphicEQ 混合转换")
+        }
+        if (unsupportedProcessingDirectiveRegex.containsMatchIn(line)) {
+            throw CurveImportException("第 $lineNumber 行包含无法映射到 20 段曲线的处理指令")
+        }
+        if (filterDirectiveRegex.containsMatchIn(line) || graphicEqDirectiveRegex.containsMatchIn(line)) return
+        throw CurveImportException("第 $lineNumber 行包含无法识别的指令")
+    }
+
+    private fun splitTableRow(line: String): List<String> {
+        val values = when {
+            '\t' in line -> line.split('\t')
+            ',' in line -> line.split(',')
+            ';' in line -> line.split(';')
+            else -> line.split(Regex("\\s+"))
+        }
+        return values.map { it.trim().trim('"', '\'') }.filter(String::isNotEmpty)
+    }
+
+    private fun resolveTableColumns(header: TableRow): TableColumns {
+        val normalized = header.values.map(::normalizeHeader)
+        val frequency = normalized.indexOfFirst { it in FrequencyHeaders }
+        if (frequency < 0) {
+            throw CurveImportException("无法从第 ${header.lineNumber} 行确定频率列")
+        }
+        val gain = GainHeaderPriority.firstNotNullOfOrNull { candidate ->
+            normalized.indexOf(candidate).takeIf { it >= 0 }
+        } ?: if (header.values.size == 2) {
+            1 - frequency
+        } else {
+            throw CurveImportException("无法确定增益列；请使用 gain、dB、eq 或 equalization 列名")
+        }
+        if (gain == frequency) throw CurveImportException("频率列和增益列不能相同")
+        return TableColumns(frequency, gain)
+    }
+
+    private fun normalizeHeader(value: String): String = value
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "")
+
     private fun formatGain(value: Double): String =
         java.lang.String.format(java.util.Locale.US, "%.4f", value)
             .trimEnd('0')
@@ -243,8 +366,8 @@ object CurveFileCodec {
 
     @Serializable
     private data class ProfileFileDto(
-        val format: String = FileFormat,
-        val version: Int = FileVersion,
+        val format: String,
+        val version: Int,
         val name: String,
         @SerialName("band_plan") val bandPlan: String,
         @SerialName("frequencies_hz") val frequenciesHz: List<Int>,
@@ -252,6 +375,8 @@ object CurveFileCodec {
     )
 
     private data class FrequencyGain(val frequencyHz: Double, val gainDb: Double)
+    private data class TableRow(val lineNumber: Int, val values: List<String>)
+    private data class TableColumns(val frequency: Int, val gain: Int)
 
     private data class Biquad(
         val b0: Double,
@@ -322,9 +447,29 @@ object CurveFileCodec {
     }
 
     private const val DEFAULT_Q = 0.7071067811865476
-    private val preampRegex = Regex("(?im)^\\s*Preamp\\s*:\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*dB\\s*$")
+    private const val MaxProfileNameLength = 40
+    private val FrequencyHeaders = setOf("frequency", "frequencyhz", "freq", "freqhz", "hz")
+    private val GainHeaderPriority = listOf(
+        "equalization",
+        "equalizationsmoothed",
+        "eq",
+        "gain",
+        "gaindb",
+        "db",
+        "level",
+        "leveldb",
+    )
+    private val preampLineRegex = Regex(
+        "(?i)^\\s*Preamp\\s*:\\s*([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*(?:dB)?\\s*$",
+    )
+    private val filterDirectiveRegex = Regex("(?i)^\\s*Filter(?:\\s+\\d+)?\\s*:")
+    private val graphicEqDirectiveRegex = Regex("(?i)^\\s*GraphicEQ\\s*:")
+    private val allChannelsRegex = Regex("(?i)^\\s*Channel\\s*:\\s*all\\s*$")
+    private val unsupportedProcessingDirectiveRegex = Regex(
+        "(?i)^\\s*(?:Include|Copy|Convolution|Delay|LoudnessCorrection)\\s*:",
+    )
     private val activeFilterRegex = Regex(
-        "(?i)^\\s*Filter(?:\\s+\\d+)?\\s*:\\s*ON\\s+(PK|PEQ|LS|HS)\\s+" +
+        "(?i)^\\s*Filter(?:\\s+\\d+)?\\s*:\\s*ON\\s+(PK|PEQ|LSC|HSC|LS|HS)\\s+" +
             "Fc\\s+([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*Hz\\s+" +
             "Gain\\s+([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*dB" +
             "(?:\\s+Q\\s+([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)))?\\s*$",

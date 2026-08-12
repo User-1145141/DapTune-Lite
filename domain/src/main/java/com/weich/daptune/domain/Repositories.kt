@@ -7,6 +7,7 @@ import com.weich.daptune.core.model.EqCurve
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.KnownOutputDevice
 import com.weich.daptune.core.model.OutputRoute
+import com.weich.daptune.core.model.OperationLogEntry
 import com.weich.daptune.core.model.ProfileSource
 import kotlinx.coroutines.flow.Flow
 
@@ -34,6 +35,8 @@ interface DeviceRepository {
 
     suspend fun rememberRoute(route: OutputRoute)
 
+    suspend fun forgetRoute(routeKey: String)
+
     suspend fun bind(routeKey: String, profileId: String?)
 
     suspend fun getBoundProfileId(routeKey: String): String?
@@ -53,4 +56,12 @@ interface SettingsRepository {
     suspend fun setAutomationEnabled(enabled: Boolean)
 
     suspend fun setApplyAtBoot(enabled: Boolean)
+}
+
+interface OperationLogRepository {
+    val entries: Flow<List<OperationLogEntry>>
+
+    suspend fun append(entry: OperationLogEntry)
+
+    suspend fun clear()
 }

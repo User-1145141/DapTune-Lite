@@ -2,7 +2,9 @@ package com.weich.daptune.feature.profiles
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.weich.daptune.core.eq.CurveImportFormat
 import com.weich.daptune.core.eq.OverflowMode
+import com.weich.daptune.core.model.DapApplyResult
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.OutputRoute
 import com.weich.daptune.domain.AudioRouteMonitor
@@ -70,6 +72,9 @@ class ProfilesViewModel @Inject constructor(
         val route = mutableState.value.currentRoute
         viewModelScope.launch {
             runCatching { selectProfileForRoute(profile.id, route) }
+                .onSuccess { result ->
+                    messageChannel.send(result.selectionMessage(profile.name))
+                }
                 .onFailure { messageChannel.send(it.message ?: "无法更新设备配置") }
         }
     }
@@ -89,12 +94,13 @@ class ProfilesViewModel @Inject constructor(
     fun importText(
         text: String,
         fileName: String,
+        format: CurveImportFormat = CurveImportFormat.AUTOMATIC,
         overflowMode: OverflowMode = OverflowMode.FIT,
     ) {
         val route = mutableState.value.currentRoute
         viewModelScope.launch {
             runCatching {
-                val imported = importCurve.parse(text, fileName)
+                val imported = importCurve.parse(text, fileName, format)
                 val curve = importCurve.convert(imported, overflowMode)
                 val saved = saveProfile(
                     existingId = null,
@@ -129,4 +135,9 @@ class ProfilesViewModel @Inject constructor(
                 .onFailure { messageChannel.send(it.message ?: "删除失败") }
         }
     }
+}
+
+private fun DapApplyResult.selectionMessage(profileName: String): String = when (this) {
+    is DapApplyResult.Success -> "已切换并应用“$profileName”"
+    is DapApplyResult.Failure -> "已切换到“$profileName”，但未能应用：$detail"
 }
