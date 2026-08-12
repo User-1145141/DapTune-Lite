@@ -135,8 +135,11 @@ Get-Content .\DapTune-vX.Y.Z.apk.sha256
 
 An empty Releases page means that no officially signed APK has been published yet. Build from
 source in that case; do not treat a local debug-certificate build as an official release. See the
-[installation guide](docs/installation.md) for source builds, upgrades, signature mismatches, and
-uninstallation.
+official APK signing certificate SHA-256:
+`79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
+See the [installation guide](docs/installation.md) for source builds, upgrades, signature
+mismatches, and uninstallation, and the
+[release-signing document](docs/release-signing.md#正式发布证书) for the public certificate.
 
 ## First run
 

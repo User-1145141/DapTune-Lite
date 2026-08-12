@@ -11,4 +11,5 @@ captures/
 keystore.properties
 signing.properties
 *.pem
+!docs/signing/daptune-release-cert.pem
 *.p12

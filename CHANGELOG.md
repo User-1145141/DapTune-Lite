@@ -23,5 +23,10 @@
 - DapTune JSON v1 规范、Schema、示例和契约一致性校验；
 - 中英文仓库首页、品牌横幅、完整文档入口和本地链接/标题锚点校验。
 
+### Release identity
+
+- Android signer certificate SHA-256:
+  `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
+
 [Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/silverpoetry/DapTune/releases/tag/v0.1.0

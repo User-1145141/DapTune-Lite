@@ -14,6 +14,7 @@
 *.yaml text eol=lf
 *.properties text eol=lf
 *.yml text eol=lf
+docs/signing/daptune-release-cert.pem text eol=lf
 .editorconfig text eol=lf
 .gitattributes text eol=lf
 .gitignore text eol=lf

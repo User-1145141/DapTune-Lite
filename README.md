@@ -111,7 +111,10 @@ Get-Content .\DapTune-vX.Y.Z.apk.sha256
 
 如果 Releases 页面还没有版本，表示尚未发布正式签名 APK。此时请按
 [从源码构建](docs/installation.md#从源码构建)验证，不要把本地 debug 证书构建当作官方版本。
-安装、覆盖更新、签名差异和卸载流程见[安装指南](docs/installation.md)。
+正式 APK 的签名证书 SHA-256 固定为
+`79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`。
+安装、覆盖更新、签名差异和卸载流程见[安装指南](docs/installation.md)，证书与产物验证见
+[发布签名文档](docs/release-signing.md#正式发布证书)。
 
 ## 首次使用
 
