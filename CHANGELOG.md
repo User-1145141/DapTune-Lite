@@ -20,7 +20,8 @@
 - 峰值/均值归零、平滑、整体移动、缩放和硬阈值限制；
 - 代理型 DAP 回读验证与回滚、`DAP_offload` setter-only 写入策略；
 - Material 3 动态配色、折叠标题、交互曲线和 20 段触感滑杆；
-- DapTune JSON v1 规范、Schema、示例和契约一致性校验。
+- DapTune JSON v1 规范、Schema、示例和契约一致性校验；
+- 中英文仓库首页、品牌横幅、完整文档入口和本地链接/标题锚点校验。
 
 [Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/silverpoetry/DapTune/releases/tag/v0.1.0

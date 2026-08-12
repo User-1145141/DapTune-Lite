@@ -12,10 +12,12 @@ DapTune 操作全局厂商 DSP。正确性、协议证据、可回滚性、隐�
 
 提交前运行：
 
-```powershell
+~~~powershell
+npx --yes markdownlint-cli2@0.18.1 "*.md" "docs/**/*.md" "tools/**/*.md" ".github/**/*.md"
+node .\tools\validate-docs.mjs
 node .\tools\validate-profile-contract.mjs
 .\gradlew.bat --no-daemon testDebugUnitTest lintRelease :app:assembleRelease
-```
+~~~
 
 CI 使用未签名 R8 Release 验证源码。不要提交本机 keystore 或通过 debug 签名伪造正式产物。
 
