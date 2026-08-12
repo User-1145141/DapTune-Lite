@@ -11,9 +11,21 @@ DapTune 的目标是把常见曲线可靠地转换到固定的 Dolby DAP 20 段�
 | GraphicEQ | Wavelet、AutoEq 常见 `GraphicEQ:` 曲线 | 对数频率轴线性插值到 20 段 |
 | ParametricEQ | Equalizer APO、AutoEq 的 PEQ 文本子集 | 按 48 kHz 计算 biquad 幅频响应后采样 |
 | CSV / TSV / 文本表 | 频率和增益两列，或可识别表头 | 对数频率轴线性插值到 20 段 |
+| AutoEq 在线目录 | 官方推荐索引和标准 `GraphicEQ` | 本地检索，按需下载后按 GraphicEQ 转换 |
 
 所有输入最多 1,000,000 个 UTF-16 code unit。频率必须为正有限数，增益必须为有限数，至少需要两个
 不同频点。超出源曲线首尾频率范围的 DAP 频点填为 `0 dB`，不做外推。
+
+## AutoEq 在线导入
+
+配置页的 AutoEq 入口读取上游 `results/README.md` 推荐索引。索引下载后在设备本地解析和检索，输入的
+搜索词不会发送到搜索服务。只有选中某个条目时，应用才从同一官方仓库按需读取该条目的标准
+`GraphicEQ.txt`；随后严格使用下述 GraphicEQ 解析、对数频率插值和 Q4 量化路径。导入结果保存为普通
+自定义配置，可继续编辑、重命名或绑定设备。
+
+索引在应用缓存中保留七天；缓存可用时，索引刷新失败会回退到缓存。清除应用缓存会删除该索引，但不会
+删除已经导入的配置。在线目录只展示 AutoEq 上游标记为 recommended 的单一结果；需要其他测量来源、
+目标曲线或个性化参数时，仍应从文件导入。
 
 ## DapTune JSON
 

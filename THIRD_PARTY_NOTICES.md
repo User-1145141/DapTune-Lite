@@ -23,6 +23,18 @@ JUnit 4 仅用于测试，按 Eclipse Public License 1.0 分发。
 
 许可文本：<https://www.eclipse.org/legal/epl-v10.html>
 
+## AutoEq
+
+在线导入功能按需读取 Jaakko Pasanen 的 AutoEq 项目所发布的推荐索引与均衡器结果，并把选中结果转换为
+DapTune 的 20 段表示。AutoEq 按 MIT License 发布；DapTune 不捆绑完整数据库，缓存内容仍保留其原始
+许可属性。
+
+Copyright (c) 2018-2022 Jaakko Pasanen
+
+项目：<https://github.com/jaakkopasanen/AutoEq>
+
+许可文本：<https://github.com/jaakkopasanen/AutoEq/blob/master/LICENSE>
+
 ## 商标
 
 Dolby、Dolby Atmos、Xiaomi、Android、Wavelet、AutoEq、Equalizer APO、Magisk、KernelSU 及其他名称

@@ -13,10 +13,27 @@ data class EqProfile(
 enum class ProfileSource {
     BUILT_IN,
     MANUAL,
+    AUTO_EQ,
     GRAPHIC_EQ,
     PARAMETRIC_EQ,
     CSV,
     DAPTUNE_FILE,
+}
+
+/** A recommended result published by the upstream AutoEq project. */
+data class AutoEqProfile(
+    val name: String,
+    /** Percent-encoded path relative to AutoEq's `results` directory. */
+    val relativePath: String,
+    val measurementSource: String,
+    val form: AutoEqForm,
+)
+
+enum class AutoEqForm {
+    IN_EAR,
+    OVER_EAR,
+    EARBUD,
+    UNKNOWN,
 }
 
 data class DeviceBinding(

@@ -46,6 +46,8 @@ audio, volume leveling, and every other Dolby parameter untouched.
 
 - Imports lossless DapTune JSON, Wavelet/AutoEq `GraphicEQ`, the supported
   Equalizer APO/AutoEq parametric subset, and CSV, TSV, or text frequency-gain tables;
+- searches AutoEq's official recommended results by headphone model and converts the selected
+  standard `GraphicEQ` into a saved 20-band custom profile;
 - supports automatic detection and an explicit source selector; an explicit choice never silently
   falls through to another parser;
 - provides peak and mean normalization, smoothing, uniform shift, scaling, and a configurable hard
@@ -192,6 +194,7 @@ notification and confirm that the service remains visible under the system's act
 | GraphicEQ | Common Wavelet/AutoEq `GraphicEQ:` plus global `Preamp:` | Linear interpolation on a log-frequency axis |
 | ParametricEQ | `PK/PEQ`, `LS/LSC`, and `HS/HSC` plus global `Preamp:` | 48 kHz biquad magnitude response |
 | CSV / TSV / text table | Two frequency-gain columns or recognized headers | Linear interpolation on a log-frequency axis |
+| AutoEq online catalog | Headphone models and canonical `GraphicEQ` files from recommended results | Local search, on-demand download, then the same converter |
 
 Independent channels, convolution, Include, Copy, Delay, LoudnessCorrection, and instructions that
 cannot be reduced to one 20-band magnitude curve are rejected explicitly rather than ignored. See
@@ -272,7 +275,9 @@ Read the [architecture document](docs/architecture.md) and
 
 ## Privacy and security
 
-- The manifest declares no `INTERNET`, microphone, camera, location, or media-read permission;
+- `INTERNET` is used only to fetch AutoEq's official recommended index and the selected
+  `GraphicEQ` on demand;
+- the manifest declares no microphone, camera, location, or media-read permission;
 - the app contains no analytics, advertising, telemetry, remote crash reporting, or upload
   endpoint;
 - it never reads, records, caches, or uploads audio;

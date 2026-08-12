@@ -31,7 +31,7 @@ app
 ## 曲线数据流
 
 ```text
-文件或滑杆
+文件、AutoEq 或滑杆
     │
     v
 20 个 Double dB ──曲线处理/超限策略──> 20 个 signed Q4 Int
@@ -81,8 +81,9 @@ app
 
 ## 持久化与隐私
 
-Room 保存配置、哈希设备键、规则、最近应用快照和操作日志；DataStore 保存自动切换设置。应用没有
-`INTERNET`、麦克风或媒体读取权限。Android 系统备份可按用户设置备份数据库与 DataStore，详见
+Room 保存配置、哈希设备键、规则、最近应用快照和操作日志；DataStore 保存自动切换设置。AutoEq 仓储
+只访问固定的官方 GitHub Raw HTTPS 路径，缓存推荐索引并在本地完成搜索；下载文本进入现有严格解析器，
+不执行远程内容。应用没有麦克风或媒体读取权限。Android 系统备份可按用户设置备份数据库与 DataStore，详见
 [隐私说明](../PRIVACY.md)。
 
 ## 架构决策记录

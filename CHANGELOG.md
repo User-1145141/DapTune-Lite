@@ -4,9 +4,23 @@
 
 ## [Unreleased]
 
-### Changed
+## [0.2.0] - 2026-08-12
 
-- 暂无。
+### Added
+
+- 配置页可检索 AutoEq 官方推荐结果，并把标准 GraphicEQ 自动转换为 DapTune 20 段自定义配置；
+- AutoEq 索引本地搜索、七天缓存、离线回退和明确的网络错误状态；
+- 搜索防抖、测量来源与耳机类型展示，以及下载、转换、保存和当前路由应用状态。
+
+### Security
+
+- 只访问代码中固定的 AutoEq 官方 GitHub Raw HTTPS 路径，不发送搜索词，不接受用户提供的 URL；
+- 对索引、配置大小、编码路径、目录穿越、条目名称和 GraphicEQ 内容执行严格校验。
+
+### Release identity
+
+- Android signer certificate SHA-256:
+  `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
 
 ## [0.1.0] - 2026-08-12
 
@@ -28,5 +42,6 @@
 - Android signer certificate SHA-256:
   `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
 
-[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/silverpoetry/DapTune/releases/tag/v0.1.0

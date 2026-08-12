@@ -120,7 +120,7 @@ private fun DapTuneApp() {
         ) {
             when (destinations[it]) {
                 AppDestination.Editor -> EditorScreen()
-                AppDestination.Profiles -> ProfilesScreen()
+                AppDestination.Profiles -> ProfilesScreen(isActive = pagerState.currentPage == it)
                 AppDestination.Automation -> AutomationScreen()
             }
         }

@@ -25,8 +25,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,6 +38,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -49,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,16 +79,18 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ProfilesScreen(
     modifier: Modifier = Modifier,
+    isActive: Boolean = true,
     viewModel: ProfilesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val autoEqState by viewModel.autoEqState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var deleting by remember { mutableStateOf<EqProfile?>(null) }
-    var importMenuExpanded by remember { mutableStateOf(false) }
     var importFormat by remember { mutableStateOf(CurveImportFormat.AUTOMATIC) }
+    var showingAutoEq by rememberSaveable { mutableStateOf(false) }
 
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -109,6 +116,20 @@ fun ProfilesScreen(
         viewModel.messages.collect(snackbar::showSnackbar)
     }
 
+    if (showingAutoEq) {
+        AutoEqSearchScreen(
+            state = autoEqState,
+            snackbarHostState = snackbar,
+            onQueryChange = viewModel::updateAutoEqQuery,
+            onRetry = viewModel::retryAutoEqSearch,
+            onImport = viewModel::importAutoEq,
+            onBack = { showingAutoEq = false },
+            isActive = isActive,
+            modifier = modifier,
+        )
+        return
+    }
+
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
@@ -116,31 +137,6 @@ fun ProfilesScreen(
             DapTuneTopAppBar(
                 title = "配置",
                 scrollBehavior = scrollBehavior,
-                actions = {
-                    Box {
-                        IconButton(onClick = { importMenuExpanded = true }) {
-                            Icon(Icons.Outlined.FileOpen, contentDescription = "导入配置")
-                        }
-                        DropdownMenu(
-                            expanded = importMenuExpanded,
-                            onDismissRequest = { importMenuExpanded = false },
-                        ) {
-                            CurveImportFormat.entries.forEach { format ->
-                                DropdownMenuItem(
-                                    text = { Text(format.displayName()) },
-                                    onClick = {
-                                        importMenuExpanded = false
-                                        importFormat = format
-                                        fileLauncher.launch(arrayOf("*/*"))
-                                    },
-                                )
-                                if (format == CurveImportFormat.AUTOMATIC) {
-                                    HorizontalDivider()
-                                }
-                            }
-                        }
-                    }
-                },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -158,7 +154,19 @@ fun ProfilesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionHeading("我的配置")
+                SectionHeading("导入")
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                ImportSourcesCard(
+                    onOpenAutoEq = { showingAutoEq = true },
+                    onImportFile = { format ->
+                        importFormat = format
+                        fileLauncher.launch(arrayOf("*/*"))
+                    },
+                )
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeading("我的配置", modifier = Modifier.padding(top = 8.dp))
             }
             if (state.userProfiles.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -167,7 +175,7 @@ fun ProfilesScreen(
                             Text("还没有自定义配置", style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "在调音页修改并保存曲线，或从文件导入。",
+                                "在调音页保存曲线，或从上方导入。",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -223,6 +231,68 @@ fun ProfilesScreen(
                 ) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
         )
+    }
+}
+
+@Composable
+private fun ImportSourcesCard(
+    onOpenAutoEq: () -> Unit,
+    onImportFile: (CurveImportFormat) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var formatMenuExpanded by remember { mutableStateOf(false) }
+    val listColors = ListItemDefaults.colors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    )
+    AppCard(modifier.fillMaxWidth()) {
+        Column {
+            ListItem(
+                headlineContent = { Text("AutoEq") },
+                supportingContent = { Text("搜索官方推荐配置") },
+                leadingContent = {
+                    Icon(Icons.Outlined.Search, contentDescription = null)
+                },
+                trailingContent = {
+                    Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                },
+                colors = listColors,
+                modifier = Modifier.clickable(onClick = onOpenAutoEq),
+            )
+            HorizontalDivider(Modifier.padding(start = 56.dp))
+            Box(Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("从文件导入") },
+                    supportingContent = { Text("JSON、GraphicEQ、ParametricEQ、CSV") },
+                    leadingContent = {
+                        Icon(Icons.Outlined.FileOpen, contentDescription = null)
+                    },
+                    trailingContent = {
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    },
+                    colors = listColors,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { formatMenuExpanded = true },
+                )
+                DropdownMenu(
+                    expanded = formatMenuExpanded,
+                    onDismissRequest = { formatMenuExpanded = false },
+                ) {
+                    CurveImportFormat.entries.forEach { format ->
+                        DropdownMenuItem(
+                            text = { Text(format.displayName()) },
+                            onClick = {
+                                formatMenuExpanded = false
+                                onImportFile(format)
+                            },
+                        )
+                        if (format == CurveImportFormat.AUTOMATIC) {
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

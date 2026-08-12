@@ -38,6 +38,7 @@ DapTune 不处理或转发 PCM，不读取录音，不替换 Android 音频路�
 
 - 导入无损 DapTune JSON、Wavelet/AutoEq `GraphicEQ`、Equalizer APO/AutoEq 参数均衡器以及
   CSV、TSV 或文本频率增益表；
+- 可在配置页按耳机型号检索 AutoEq 官方推荐结果，选中后自动下载、转换并保存为自定义配置；
 - 支持自动识别，也允许明确指定来源；显式选择后不会静默切换到其他解析器；
 - 提供峰值归零、均值归零、平滑、整体位移、缩放和可配置硬阈值限制；
 - 对非原生曲线使用确定性的对数频率插值或 48 kHz biquad 幅频采样，再统一量化到 20 段 Q4。
@@ -157,6 +158,7 @@ Android 13+ 拒绝通知权限时，AOSP 仍允许前台服务运行，但通知
 | GraphicEQ | Wavelet、AutoEq 常见 `GraphicEQ:` 与全局 `Preamp:` | 对数频率轴线性插值 |
 | ParametricEQ | `PK/PEQ`、`LS/LSC`、`HS/HSC`，可含全局 `Preamp:` | 按 48 kHz 求 biquad 幅频响应 |
 | CSV / TSV / 文本表 | 两列频率与增益，或受支持的表头 | 对数频率轴线性插值 |
+| AutoEq 在线目录 | 官方推荐结果中的耳机型号与标准 `GraphicEQ` | 本地检索，按需下载，再走同一转换器 |
 
 不支持独立左右声道、卷积、Include、Copy、Delay、LoudnessCorrection 或无法映射到单条 20 段幅频
 曲线的指令；应用会明确拒绝，而不是静默丢弃。完整语法、表头优先级、超范围行为和正增益超限策略见
@@ -232,7 +234,8 @@ PlaybackRouteMonitor ──> 设备规则 ──> ApplyEqCurve
 
 ## 隐私与安全
 
-- 应用清单不声明 `INTERNET`、麦克风、摄像头、位置或媒体读取权限；
+- `INTERNET` 只用于按需读取 AutoEq 官方推荐索引和用户选中的 `GraphicEQ`；
+- 不声明麦克风、摄像头、位置或媒体读取权限；
 - 不包含分析、广告、遥测、远程崩溃上报或上传端点；
 - 不读取、录制、缓存或上传音频；
 - 蓝牙等原始地址不写数据库，稳定设备键由本机身份输入的 SHA-256 摘要生成；
