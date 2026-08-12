@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞
+    url: https://github.com/silverpoetry/DapTune/security/advisories/new
+    about: 可被利用的安全问题请使用私密漏洞报告。
+  - name: 故障排查
+    url: https://github.com/silverpoetry/DapTune/blob/main/docs/troubleshooting.md
+    about: 提交前先检查兼容条件、播放路径和脱敏日志要求。

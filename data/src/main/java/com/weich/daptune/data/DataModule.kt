@@ -3,6 +3,7 @@ package com.weich.daptune.data
 import android.content.Context
 import androidx.room.Room
 import com.weich.daptune.domain.DeviceRepository
+import com.weich.daptune.domain.OperationLogRepository
 import com.weich.daptune.domain.ProfileRepository
 import com.weich.daptune.domain.SettingsRepository
 import dagger.Binds
@@ -27,6 +28,12 @@ abstract class RepositoryBindings {
     @Binds
     @Singleton
     abstract fun bindSettingsRepository(implementation: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindOperationLogRepository(
+        implementation: OperationLogRepositoryImpl,
+    ): OperationLogRepository
 }
 
 @Module
@@ -35,7 +42,9 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): DapTuneDatabase =
-        Room.databaseBuilder(context, DapTuneDatabase::class.java, "daptune.db").build()
+        Room.databaseBuilder(context, DapTuneDatabase::class.java, "daptune.db")
+            .addMigrations(DapTuneDatabase.Migration1To2)
+            .build()
 
     @Provides
     fun provideProfileDao(database: DapTuneDatabase): ProfileDao = database.profileDao()
@@ -45,4 +54,7 @@ object DatabaseModule {
 
     @Provides
     fun provideAppliedStateDao(database: DapTuneDatabase): AppliedStateDao = database.appliedStateDao()
+
+    @Provides
+    fun provideOperationLogDao(database: DapTuneDatabase): OperationLogDao = database.operationLogDao()
 }

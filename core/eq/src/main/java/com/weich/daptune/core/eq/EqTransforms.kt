@@ -2,6 +2,7 @@ package com.weich.daptune.core.eq
 
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqCurve
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 enum class OverflowMode {
@@ -52,8 +53,24 @@ object EqTransforms {
         return quantize(curve.toDbList().map { it * factor }, OverflowMode.FIT).curve
     }
 
-    fun invert(curve: EqCurve): EqCurve =
-        quantize(curve.toDbList().map { -it }, OverflowMode.FIT).curve
+    /**
+     * Hard-limits every band above [thresholdDb] without changing lower bands.
+     *
+     * The product has no artificial attenuation floor, so negative thresholds are valid.
+     * Dolby's +10 dB boost ceiling remains the only user-facing upper bound.
+     */
+    fun limitMaximum(curve: EqCurve, thresholdDb: Double): EqCurve {
+        require(thresholdDb.isFinite()) { "Threshold must be finite" }
+        require(thresholdDb <= EqCurve.MAX_BOOST_DB) {
+            "Threshold exceeds +${EqCurve.MAX_BOOST_DB} dB"
+        }
+        // Round toward attenuation so the represented Q4 value never exceeds the requested cap.
+        val thresholdQ4 = floor(thresholdDb * EqCurve.Q4_PER_DB)
+            .toLong()
+            .coerceAtLeast(Int.MIN_VALUE.toLong())
+            .toInt()
+        return EqCurve.ofQ4(curve.toQ4List().map { it.coerceAtMost(thresholdQ4) })
+    }
 
     fun smooth(curve: EqCurve, passes: Int = 1): EqCurve {
         require(passes in 1..8)

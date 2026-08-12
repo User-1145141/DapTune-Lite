@@ -1,0 +1,6 @@
+id=daptune_usb_dsp_offload
+name=DapTune USB DSP Offload (turner)
+version=1.0.0
+versionCode=1
+author=DapTune
+description=Enables the MediaTek USB playback DSP-offload route on Xiaomi turner for Dolby DAP validation. Disable the module and reboot to restore the vendor default.

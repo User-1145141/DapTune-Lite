@@ -125,6 +125,8 @@ class ResolveProfileForRouteUseCaseTest {
 
         override suspend fun rememberRoute(route: OutputRoute) = Unit
 
+        override suspend fun forgetRoute(routeKey: String) = Unit
+
         override suspend fun bind(routeKey: String, profileId: String?) = Unit
 
         override suspend fun getBoundProfileId(routeKey: String): String? = profileIdsByRoute[routeKey]

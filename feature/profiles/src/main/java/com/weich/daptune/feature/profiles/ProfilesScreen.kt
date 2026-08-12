@@ -1,5 +1,8 @@
 package com.weich.daptune.feature.profiles
 
+import android.content.ContentResolver
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -30,6 +33,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +62,10 @@ import com.weich.daptune.core.designsystem.AppCard
 import com.weich.daptune.core.designsystem.CurveSparkline
 import com.weich.daptune.core.designsystem.DapTuneTopAppBar
 import com.weich.daptune.core.designsystem.formatGain
+import com.weich.daptune.core.eq.CurveFileCodec
+import com.weich.daptune.core.eq.CurveImportFormat
 import com.weich.daptune.core.model.EqProfile
+import java.io.Reader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,20 +82,25 @@ fun ProfilesScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var deleting by remember { mutableStateOf<EqProfile?>(null) }
+    var importMenuExpanded by remember { mutableStateOf(false) }
+    var importFormat by remember { mutableStateOf(CurveImportFormat.AUTOMATIC) }
 
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val text = context.contentResolver.openInputStream(uri)
+                    val resolver = context.contentResolver
+                    val text = resolver.openInputStream(uri)
                         ?.bufferedReader()
-                        ?.use { it.readText() }
+                        ?.use(Reader::readImportText)
                         ?: error("无法读取文件")
-                    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "导入配置"
+                    val name = resolver.displayName(uri)
+                        ?: uri.lastPathSegment?.substringAfterLast('/')
+                        ?: "导入配置"
                     text to name
                 }
-            }.onSuccess { (text, name) -> viewModel.importText(text, name) }
+            }.onSuccess { (text, name) -> viewModel.importText(text, name, importFormat) }
                 .onFailure { snackbar.showSnackbar(it.message ?: "无法读取文件") }
         }
     }
@@ -105,14 +117,28 @@ fun ProfilesScreen(
                 title = "配置",
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(
-                        onClick = {
-                            fileLauncher.launch(
-                                arrayOf("text/*", "application/json", "application/octet-stream"),
-                            )
-                        },
-                    ) {
-                        Icon(Icons.Outlined.FileOpen, contentDescription = "导入配置")
+                    Box {
+                        IconButton(onClick = { importMenuExpanded = true }) {
+                            Icon(Icons.Outlined.FileOpen, contentDescription = "导入配置")
+                        }
+                        DropdownMenu(
+                            expanded = importMenuExpanded,
+                            onDismissRequest = { importMenuExpanded = false },
+                        ) {
+                            CurveImportFormat.entries.forEach { format ->
+                                DropdownMenuItem(
+                                    text = { Text(format.displayName()) },
+                                    onClick = {
+                                        importMenuExpanded = false
+                                        importFormat = format
+                                        fileLauncher.launch(arrayOf("*/*"))
+                                    },
+                                )
+                                if (format == CurveImportFormat.AUTOMATIC) {
+                                    HorizontalDivider()
+                                }
+                            }
+                        }
                     }
                 },
             )
@@ -197,6 +223,40 @@ fun ProfilesScreen(
                 ) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
         )
+    }
+}
+
+private fun CurveImportFormat.displayName(): String = when (this) {
+    CurveImportFormat.AUTOMATIC -> "自动识别"
+    CurveImportFormat.DAPTUNE_JSON -> "DapTune 配置（JSON）"
+    CurveImportFormat.GRAPHIC_EQ -> "GraphicEQ（Wavelet / AutoEq）"
+    CurveImportFormat.PARAMETRIC_EQ -> "ParametricEQ（AutoEq / EAPO）"
+    CurveImportFormat.FREQUENCY_GAIN_TABLE -> "CSV / TSV 频率－增益表"
+}
+
+private fun ContentResolver.displayName(uri: Uri): String? = query(
+    uri,
+    arrayOf(OpenableColumns.DISPLAY_NAME),
+    null,
+    null,
+    null,
+)?.use { cursor ->
+    val nameColumn = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+    cursor.takeIf { nameColumn >= 0 && it.moveToFirst() }
+        ?.getString(nameColumn)
+        ?.takeIf(String::isNotBlank)
+}
+
+private fun Reader.readImportText(): String {
+    val output = StringBuilder()
+    val buffer = CharArray(8_192)
+    while (true) {
+        val count = read(buffer)
+        if (count < 0) return output.toString()
+        if (output.length + count > CurveFileCodec.MAX_IMPORT_CHARACTERS) {
+            throw IllegalArgumentException("文件过大")
+        }
+        output.append(buffer, 0, count)
     }
 }
 

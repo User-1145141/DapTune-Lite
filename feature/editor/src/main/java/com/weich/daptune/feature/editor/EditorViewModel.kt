@@ -57,7 +57,6 @@ enum class CurveAction {
     PEAK_TO_ZERO,
     MEAN_TO_ZERO,
     SMOOTH,
-    INVERT,
     FLATTEN,
 }
 
@@ -137,6 +136,9 @@ class EditorViewModel @Inject constructor(
         }
         viewModelScope.launch {
             runCatching { selectProfileForRoute(profile.id, route) }
+                .onSuccess { result ->
+                    eventChannel.send(EditorEvent.Message(result.selectionMessage(profile.name)))
+                }
                 .onFailure { eventChannel.send(EditorEvent.Message(it.message ?: "无法更新设备配置")) }
         }
     }
@@ -166,10 +168,15 @@ class EditorViewModel @Inject constructor(
                 CurveAction.PEAK_TO_ZERO -> EqTransforms.peakToZero(current.curve)
                 CurveAction.MEAN_TO_ZERO -> EqTransforms.meanToZero(current.curve)
                 CurveAction.SMOOTH -> EqTransforms.smooth(current.curve)
-                CurveAction.INVERT -> EqTransforms.invert(current.curve)
                 CurveAction.FLATTEN -> EqCurve.flat()
             }
             current.copy(curve = transformed)
+        }
+    }
+
+    fun limitMaximum(thresholdDb: Double) {
+        mutableState.update { current ->
+            current.copy(curve = EqTransforms.limitMaximum(current.curve, thresholdDb))
         }
     }
 
@@ -272,4 +279,9 @@ private fun DapApplyResult.Success.successMessage(): String = when (receipt.veri
         "已写入并验证 ${receipt.profileCount} 个 Dolby 配置"
     DapApplyVerification.WRITE_ACCEPTED ->
         "已写入 ${receipt.profileCount} 个 Dolby 配置 · 此设备不支持曲线回读"
+}
+
+private fun DapApplyResult.selectionMessage(profileName: String): String = when (this) {
+    is DapApplyResult.Success -> "已切换并应用“$profileName”"
+    is DapApplyResult.Failure -> "已切换到“$profileName”，但未能应用：$detail"
 }

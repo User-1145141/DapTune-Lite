@@ -4,13 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.weich.daptune.core.model.AppliedSnapshot
 import com.weich.daptune.core.model.AppSettings
+import com.weich.daptune.core.model.DapApplyResult
 import com.weich.daptune.core.model.DeviceBinding
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.KnownOutputDevice
 import com.weich.daptune.core.model.OutputRoute
+import com.weich.daptune.core.model.OperationLogAction
+import com.weich.daptune.core.model.OperationLogEntry
+import com.weich.daptune.core.model.OperationLogOutcome
+import com.weich.daptune.core.model.ProfileApplySource
 import com.weich.daptune.domain.AudioRouteMonitor
+import com.weich.daptune.domain.ApplyProfileUseCase
 import com.weich.daptune.domain.DeviceRepository
 import com.weich.daptune.domain.ProfileRepository
+import com.weich.daptune.domain.OperationLogRepository
+import com.weich.daptune.domain.ResolveProfileForRouteUseCase
 import com.weich.daptune.domain.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -28,6 +36,7 @@ data class AutomationUiState(
     val bindings: List<DeviceBinding> = emptyList(),
     val currentRoute: OutputRoute = OutputRoute.Speaker,
     val appliedSnapshot: AppliedSnapshot? = null,
+    val operationLogs: List<OperationLogEntry> = emptyList(),
 ) {
     fun profileFor(routeKey: String): EqProfile? {
         val profileId = bindings.firstOrNull { it.routeKey == routeKey }?.profileId
@@ -45,12 +54,14 @@ private data class AutomationSources(
     val settings: AppSettings,
     val route: OutputRoute,
     val snapshot: AppliedSnapshot?,
+    val operationLogs: List<OperationLogEntry>,
 )
 
 private data class ProfileDeviceSources(
     val profiles: List<EqProfile>,
     val devices: List<KnownOutputDevice>,
     val bindings: List<DeviceBinding>,
+    val operationLogs: List<OperationLogEntry>,
 )
 
 private data class RuntimeSources(
@@ -65,7 +76,10 @@ class AutomationViewModel @Inject constructor(
     private val deviceRepository: DeviceRepository,
     private val settingsRepository: SettingsRepository,
     private val routeMonitor: AudioRouteMonitor,
+    private val resolveProfile: ResolveProfileForRouteUseCase,
+    private val applyProfile: ApplyProfileUseCase,
     private val controller: AutomationController,
+    private val operationLogRepository: OperationLogRepository,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(AutomationUiState())
     val state: StateFlow<AutomationUiState> = mutableState
@@ -79,8 +93,9 @@ class AutomationViewModel @Inject constructor(
                 profileRepository.profiles,
                 deviceRepository.knownDevices,
                 deviceRepository.bindings,
-            ) { profiles, devices, bindings ->
-                ProfileDeviceSources(profiles, devices, bindings)
+                operationLogRepository.entries,
+            ) { profiles, devices, bindings, operationLogs ->
+                ProfileDeviceSources(profiles, devices, bindings, operationLogs)
             }
             val runtimeSources = combine(
                 settingsRepository.settings,
@@ -97,6 +112,7 @@ class AutomationViewModel @Inject constructor(
                     settings = runtime.settings,
                     route = runtime.route,
                     snapshot = runtime.snapshot,
+                    operationLogs = profileSources.operationLogs,
                 )
             }.collect { sources ->
                 mutableState.emit(
@@ -107,6 +123,7 @@ class AutomationViewModel @Inject constructor(
                         bindings = sources.bindings,
                         currentRoute = sources.route,
                         appliedSnapshot = sources.snapshot,
+                        operationLogs = sources.operationLogs,
                     ),
                 )
                 deviceRepository.rememberRoute(sources.route)
@@ -119,7 +136,33 @@ class AutomationViewModel @Inject constructor(
             runCatching {
                 settingsRepository.setAutomationEnabled(enabled)
                 if (enabled) controller.start() else controller.stop()
-            }.onFailure { messageChannel.send(it.message ?: "无法更新自动切换") }
+            }.onSuccess {
+                appendOperationLog(
+                    OperationLogEntry(
+                        occurredAtEpochMillis = System.currentTimeMillis(),
+                        action = if (enabled) {
+                            OperationLogAction.AUTOMATION_ENABLED
+                        } else {
+                            OperationLogAction.AUTOMATION_DISABLED
+                        },
+                        outcome = OperationLogOutcome.SUCCESS,
+                    ),
+                )
+            }.onFailure { error ->
+                appendOperationLog(
+                    OperationLogEntry(
+                        occurredAtEpochMillis = System.currentTimeMillis(),
+                        action = if (enabled) {
+                            OperationLogAction.AUTOMATION_ENABLED
+                        } else {
+                            OperationLogAction.AUTOMATION_DISABLED
+                        },
+                        outcome = OperationLogOutcome.FAILURE,
+                        detail = error.message ?: error.javaClass.simpleName,
+                    ),
+                )
+                messageChannel.send(error.message ?: "无法更新自动切换")
+            }
         }
     }
 
@@ -131,23 +174,140 @@ class AutomationViewModel @Inject constructor(
     }
 
     fun setApplyAtBoot(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setApplyAtBoot(enabled) }
+        viewModelScope.launch {
+            runCatching { settingsRepository.setApplyAtBoot(enabled) }
+                .onSuccess {
+                    appendOperationLog(
+                        OperationLogEntry(
+                            occurredAtEpochMillis = System.currentTimeMillis(),
+                            action = if (enabled) {
+                                OperationLogAction.START_AT_BOOT_ENABLED
+                            } else {
+                                OperationLogAction.START_AT_BOOT_DISABLED
+                            },
+                            outcome = OperationLogOutcome.SUCCESS,
+                        ),
+                    )
+                }
+                .onFailure { error ->
+                    messageChannel.send(error.message ?: "无法更新重启恢复设置")
+                }
+        }
     }
 
     fun setDefaultProfile(profileId: String) {
         viewModelScope.launch {
-            settingsRepository.setDefaultProfile(profileId)
-            if (mutableState.value.settings.automationEnabled) controller.refresh()
+            runCatching {
+                settingsRepository.setDefaultProfile(profileId)
+                applyResolvedProfileToCurrentRoute(ProfileApplySource.DEFAULT_RULE_CHANGE)
+            }.onSuccess { application ->
+                if (application == null) {
+                    messageChannel.send("默认配置已更新")
+                } else {
+                    reportApplication(application, savedLabel = "默认配置已更新")
+                }
+            }.onFailure { error ->
+                messageChannel.send(error.message ?: "无法更新默认配置")
+            }
         }
     }
 
     fun bind(routeKey: String, profileId: String?) {
         viewModelScope.launch {
-            deviceRepository.bind(routeKey, profileId)
-            messageChannel.send(if (profileId == null) "已改为跟随默认配置" else "设备配置已更新")
-            if (mutableState.value.settings.automationEnabled && routeKey == mutableState.value.currentRoute.key) {
-                controller.refresh()
+            runCatching {
+                deviceRepository.bind(routeKey, profileId)
+                val currentRoute = routeMonitor.currentRoute()
+                if (routeKey == currentRoute.key) {
+                    applyResolvedProfile(currentRoute, ProfileApplySource.DEVICE_RULE_CHANGE)
+                } else {
+                    val route = mutableState.value.devices
+                        .firstOrNull { it.route.key == routeKey }
+                        ?.route
+                    val profile = profileId?.let { selectedId ->
+                        mutableState.value.profiles.firstOrNull { it.id == selectedId }
+                    }
+                    appendOperationLog(
+                        OperationLogEntry(
+                            occurredAtEpochMillis = System.currentTimeMillis(),
+                            action = OperationLogAction.DEVICE_RULE_CHANGED,
+                            outcome = OperationLogOutcome.SUCCESS,
+                            routeKey = routeKey,
+                            routeName = route?.displayName,
+                            profileId = profileId,
+                            profileName = profile?.name,
+                        ),
+                    )
+                    null
+                }
+            }.onSuccess { application ->
+                val savedLabel = if (profileId == null) "已改为跟随默认配置" else "设备配置已更新"
+                if (application == null) {
+                    messageChannel.send(savedLabel)
+                } else {
+                    reportApplication(application, savedLabel)
+                }
+            }.onFailure { error ->
+                messageChannel.send(error.message ?: "无法更新设备配置")
             }
         }
     }
+
+    fun forget(routeKey: String, displayName: String) {
+        viewModelScope.launch {
+            val currentRoute = routeMonitor.currentRoute()
+            if (routeKey == currentRoute.key) {
+                messageChannel.send("当前设备无法从历史记录中删除")
+                return@launch
+            }
+            runCatching { deviceRepository.forgetRoute(routeKey) }
+                .onSuccess {
+                    appendOperationLog(
+                        OperationLogEntry(
+                            occurredAtEpochMillis = System.currentTimeMillis(),
+                            action = OperationLogAction.DEVICE_FORGOTTEN,
+                            outcome = OperationLogOutcome.SUCCESS,
+                            routeKey = routeKey,
+                            routeName = displayName,
+                        ),
+                    )
+                    messageChannel.send("已忘记“$displayName”")
+                }
+                .onFailure { error -> messageChannel.send(error.message ?: "无法删除设备") }
+        }
+    }
+
+    fun clearOperationLogs() {
+        viewModelScope.launch {
+            runCatching { operationLogRepository.clear() }
+                .onFailure { error -> messageChannel.send(error.message ?: "无法清空记录") }
+        }
+    }
+
+    private suspend fun appendOperationLog(entry: OperationLogEntry) {
+        runCatching { operationLogRepository.append(entry) }
+    }
+
+    private suspend fun applyResolvedProfileToCurrentRoute(
+        source: ProfileApplySource,
+    ): ProfileApplication? = applyResolvedProfile(routeMonitor.currentRoute(), source)
+
+    private suspend fun applyResolvedProfile(
+        route: OutputRoute,
+        source: ProfileApplySource,
+    ): ProfileApplication? {
+        val profile = resolveProfile(route) ?: return null
+        return ProfileApplication(profile, applyProfile(profile.id, route, source))
+    }
+
+    private suspend fun reportApplication(application: ProfileApplication, savedLabel: String) {
+        when (val result = application.result) {
+            is DapApplyResult.Success -> messageChannel.send("已应用“${application.profile.name}”")
+            is DapApplyResult.Failure -> messageChannel.send("$savedLabel，但未能应用：${result.detail}")
+        }
+    }
 }
+
+private data class ProfileApplication(
+    val profile: EqProfile,
+    val result: DapApplyResult,
+)

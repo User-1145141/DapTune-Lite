@@ -11,6 +11,6 @@ indent_style = space
 indent_size = 4
 max_line_length = 120
 
-[*.{xml,json,toml}]
+[*.{xml,json,toml,yml,yaml,js,mjs}]
 indent_style = space
 indent_size = 2

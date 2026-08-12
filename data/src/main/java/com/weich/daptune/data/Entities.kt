@@ -69,3 +69,20 @@ data class AppliedStateEntity(
     val appliedAtEpochMillis: Long,
     val verification: String,
 )
+
+@Entity(
+    tableName = "operation_logs",
+    indices = [Index("occurredAtEpochMillis")],
+)
+data class OperationLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val occurredAtEpochMillis: Long,
+    val action: String,
+    val outcome: String,
+    val routeKey: String?,
+    val routeName: String?,
+    val profileId: String?,
+    val profileName: String?,
+    val verification: String?,
+    val detail: String?,
+)
