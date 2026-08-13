@@ -56,12 +56,13 @@ class EqAutomationService : Service() {
     @Inject lateinit var resolveProfile: ResolveProfileForRouteUseCase
     @Inject lateinit var applyProfile: ApplyProfileUseCase
     @Inject lateinit var operationLogs: OperationLogRepository
-    @Inject lateinit var recoveryScheduler: AutomationRecoveryScheduler
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val routeProcessingMutex = Mutex()
     private var monitorJob: Job? = null
+    private var restoreJob: Job? = null
+    private var commandGeneration = 0L
     private var lastAppliedRouteKey: String? = null
     private var lastAppliedCurveHash: Int? = null
     private val dolbyStateReceiver = object : BroadcastReceiver() {
@@ -86,9 +87,13 @@ class EqAutomationService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val command = automationServiceCommand(intent?.action)
-        val initialSource = when (command) {
+        when (command) {
             AutomationServiceCommand.STOP -> {
-                recoveryScheduler.onAutomationStopped()
+                commandGeneration += 1
+                restoreJob?.cancel()
+                restoreJob = null
+                monitorJob?.cancel()
+                monitorJob = null
                 serviceScope.launch {
                     try {
                         settingsRepository.setAutomationEnabled(false)
@@ -99,23 +104,52 @@ class EqAutomationService : Service() {
                 return START_NOT_STICKY
             }
             AutomationServiceCommand.IGNORE -> {
-                stopSelf(startId)
-                return START_NOT_STICKY
+                return if (monitorJob?.isActive == true || restoreJob?.isActive == true) {
+                    START_STICKY
+                } else {
+                    stopSelf(startId)
+                    START_NOT_STICKY
+                }
             }
-            AutomationServiceCommand.START -> if (monitorJob == null) {
-                ProfileApplySource.AUTOMATION_START
-            } else {
-                ProfileApplySource.AUTOMATION_REFRESH
+            AutomationServiceCommand.START -> {
+                commandGeneration += 1
+                restoreJob?.cancel()
+                restoreJob = null
+                val source = if (monitorJob == null) {
+                    ProfileApplySource.AUTOMATION_START
+                } else {
+                    ProfileApplySource.AUTOMATION_REFRESH
+                }
+                promoteToForeground("正在检查播放设备")
+                replaceMonitoringSession(source)
             }
-            AutomationServiceCommand.RECOVER -> ProfileApplySource.AUTOMATION_RECOVERY
+            AutomationServiceCommand.SYSTEM_RESTART -> {
+                commandGeneration += 1
+                val generation = commandGeneration
+                promoteToForeground("正在恢复自动切换")
+                restoreJob?.cancel()
+                restoreJob = serviceScope.launch {
+                    val enabled = try {
+                        settingsRepository.settings.first().automationEnabled
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Throwable) {
+                        recordMonitorFailure(error)
+                        false
+                    }
+                    mainHandler.post {
+                        if (generation != commandGeneration) return@post
+                        restoreJob = null
+                        if (enabled) {
+                            replaceMonitoringSession(ProfileApplySource.AUTOMATION_RECOVERY)
+                        } else {
+                            shutdown()
+                        }
+                    }
+                }
+            }
         }
-
-        recoveryScheduler.onAutomationStarted()
-        promoteToForeground("正在检查播放设备")
-        replaceMonitoringSession(initialSource)
-        // Task-removal recovery is owned by AutomationRecoveryScheduler. A second sticky restart
-        // path would create an indistinguishable competing lifecycle for the same listener.
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -300,7 +334,9 @@ class EqAutomationService : Service() {
     }
 
     private fun shutdown() {
-        recoveryScheduler.onAutomationStopped()
+        commandGeneration += 1
+        restoreJob?.cancel()
+        restoreJob = null
         monitorJob?.cancel()
         monitorJob = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -332,8 +368,6 @@ class EqAutomationService : Service() {
     companion object {
         const val ActionStart = "com.weich.daptune.action.START_AUTOMATION"
         const val ActionStop = "com.weich.daptune.action.STOP_AUTOMATION"
-        const val ActionRecover =
-            "com.weich.daptune.action.RECOVER_AFTER_TASK_REMOVAL"
         private const val XiaomiDolbyStateAction =
             "miui.intent.action.ACTION_SYSTEM_UI_DOLBY_EFFECT_SWITCH"
         private const val NotificationChannelId = "eq_automation"
@@ -346,14 +380,21 @@ class EqAutomationService : Service() {
 
 internal enum class AutomationServiceCommand {
     START,
-    RECOVER,
+    SYSTEM_RESTART,
     STOP,
     IGNORE,
 }
 
 internal fun automationServiceCommand(action: String?): AutomationServiceCommand = when (action) {
-    EqAutomationService.ActionRecover -> AutomationServiceCommand.RECOVER
+    null,
+    LegacyRecoveryAction,
+    -> AutomationServiceCommand.SYSTEM_RESTART
     EqAutomationService.ActionStart -> AutomationServiceCommand.START
     EqAutomationService.ActionStop -> AutomationServiceCommand.STOP
     else -> AutomationServiceCommand.IGNORE
 }
+
+// Accept an already-scheduled PendingIntent from 0.3.1 once after an in-place update. New code
+// never schedules this action; all future process recovery is owned by START_STICKY.
+private const val LegacyRecoveryAction =
+    "com.weich.daptune.action.RECOVER_AFTER_TASK_REMOVAL"

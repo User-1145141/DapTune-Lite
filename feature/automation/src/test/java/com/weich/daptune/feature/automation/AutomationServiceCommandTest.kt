@@ -5,8 +5,16 @@ import org.junit.Test
 
 class AutomationServiceCommandTest {
     @Test
-    fun nullIntentDoesNotCreateASecondRecoveryPath() {
-        assertEquals(AutomationServiceCommand.IGNORE, automationServiceCommand(null))
+    fun nullIntentRestoresTheStickyServiceSession() {
+        assertEquals(AutomationServiceCommand.SYSTEM_RESTART, automationServiceCommand(null))
+    }
+
+    @Test
+    fun pendingRecoveryFromThePreviousVersionMigratesToStickyRecovery() {
+        assertEquals(
+            AutomationServiceCommand.SYSTEM_RESTART,
+            automationServiceCommand("com.weich.daptune.action.RECOVER_AFTER_TASK_REMOVAL"),
+        )
     }
 
     @Test
@@ -14,10 +22,6 @@ class AutomationServiceCommandTest {
         assertEquals(
             AutomationServiceCommand.START,
             automationServiceCommand(EqAutomationService.ActionStart),
-        )
-        assertEquals(
-            AutomationServiceCommand.RECOVER,
-            automationServiceCommand(EqAutomationService.ActionRecover),
         )
         assertEquals(
             AutomationServiceCommand.STOP,

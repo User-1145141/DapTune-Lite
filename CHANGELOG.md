@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-14
+
+### Fixed
+
+- 修复 HyperOS 清理最近任务后只恢复前台服务与通知、却没有重建播放设备监听会话的问题；
+- 自动切换统一使用 Android `START_STICKY` 生命周期：系统重建时从持久设置核对开关，开启后立即重建唯一监听会话并应用当前路由；
+- 删除依赖 Activity 前后台状态的一次性 Alarm、进程内运行标记及相关恢复动作，避免多套恢复机制竞态和数小时后的失效窗口；
+- 系统恢复、显式启动和停止使用带世代保护的互斥状态转换，过期的异步读取不能覆盖用户后续操作；
+- 原位升级兼容 0.3.1 已登记的一次旧恢复请求，新版本不再创建此类请求。
+
 ## [0.3.1] - 2026-08-13
 
 ### Fixed
@@ -78,7 +88,8 @@
 - Android signer certificate SHA-256:
   `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
 
-[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/silverpoetry/DapTune/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/silverpoetry/DapTune/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/silverpoetry/DapTune/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...v0.2.0

@@ -65,19 +65,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.weich.daptune.core.designsystem.DapTuneTheme
 import com.weich.daptune.feature.about.AboutScreen
 import com.weich.daptune.feature.about.AboutUiState
-import com.weich.daptune.feature.automation.AutomationRecoveryScheduler
 import com.weich.daptune.feature.automation.AutomationScreen
 import com.weich.daptune.feature.editor.EditorScreen
 import com.weich.daptune.feature.profiles.ProfilesScreen
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val appViewModel: AppViewModel by viewModels()
-
-    @Inject lateinit var recoveryScheduler: AutomationRecoveryScheduler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,16 +88,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        recoveryScheduler.disarm()
-    }
-
-    override fun onPause() {
-        recoveryScheduler.arm()
-        super.onPause()
     }
 }
 
