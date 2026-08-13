@@ -2,6 +2,7 @@ package com.weich.daptune.domain
 
 import com.weich.daptune.core.model.AppliedSnapshot
 import com.weich.daptune.core.model.AppSettings
+import com.weich.daptune.core.model.AppRelease
 import com.weich.daptune.core.model.AutoEqProfile
 import com.weich.daptune.core.model.DeviceBinding
 import com.weich.daptune.core.model.EqCurve
@@ -65,6 +66,14 @@ interface SettingsRepository {
     suspend fun setAutomationEnabled(enabled: Boolean)
 
     suspend fun setApplyAtBoot(enabled: Boolean)
+
+    suspend fun setAutomaticUpdateChecksEnabled(enabled: Boolean)
+
+    suspend fun setLastUpdateCheckAtEpochMillis(value: Long)
+}
+
+interface UpdateRepository {
+    suspend fun latestRelease(): AppRelease
 }
 
 interface OperationLogRepository {

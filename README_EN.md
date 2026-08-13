@@ -67,6 +67,8 @@ audio, volume leveling, and every other Dolby parameter untouched.
 - can restore the service after boot or app replacement only when the user has enabled automation;
 - records route, profile, trigger, write result, and verification level in a dedicated clearable
   log.
+- provides an About screen with manual GitHub release checks and an enabled-by-default automatic
+  check limited to once every 24 hours.
 
 ### Write safety
 
@@ -127,8 +129,8 @@ playback-route limitations.
 2. verify SHA-256 and do not install third-party repackages, temporary Actions artifacts, or an
    `optimized` test build;
 3. leave the system Dolby effect enabled and perform the low-volume verification below;
-4. only then grant the minimum Bluetooth and notification permissions needed for automation and
-   configure the device's background policy if required.
+4. grant Nearby devices on first launch; grant notifications and configure the device's background
+   policy only if automation requires them.
 
 ~~~powershell
 Get-FileHash .\DapTune-vX.Y.Z.apk -Algorithm SHA256
@@ -147,16 +149,17 @@ mismatches, and uninstallation, and the
 
 1. Enable Dolby Atmos in system settings and confirm that the system switch itself produces an
    audible difference;
-2. open DapTune, select Flat in Tune, and apply it;
-3. at low volume, temporarily make an obvious midrange cut and compare it with the same player,
+2. open DapTune and grant Nearby devices; this is a prerequisite for accurate Bluetooth identity;
+3. select Flat in Tune and apply it;
+4. at low volume, temporarily make an obvious midrange cut and compare it with the same player,
    level, and output;
-4. distinguish “curve verified by readback” from “write command accepted,” then restore the target
+5. distinguish “curve verified by readback” from “write command accepted,” then restore the target
    curve;
-5. import or save named curves from Profiles;
-6. assign the default and per-device rules in Automation, then enable automatic switching;
-7. enable restore-after-reboot only if desired, and allow autostart, background operation, or an
+6. import or save named curves from Profiles;
+7. assign the default and per-device rules in Automation, then enable automatic switching;
+8. enable restore-after-reboot only if desired, and allow autostart, background operation, or an
    unrestricted battery policy where the firmware requires it;
-8. switch outputs and inspect the log for the detected route, selected profile, and write result.
+9. switch outputs and inspect the log for the detected route, selected profile, and write result.
 
 ### Result semantics
 
@@ -175,6 +178,14 @@ Automation runs only after the user explicitly enables it. The service first res
 route, then listens for route and Dolby-state events. An unchanged route and curve are not written
 again during the same service lifetime. Exact device rules override the default profile; deleting a
 historical device also removes its device record and rule.
+
+On Android 12 and newer, Nearby devices is required before entering the app. A persistent Bluetooth
+key is created only when a complete address is uniquely verified against Android's bonded-device
+inventory. An anonymized address, device name, or MediaRouter wrapper ID is never persisted or used
+for a device-specific rule. If permission is revoked while the app is running, the UI returns to the
+permission gate and automation refuses to guess by name. Granting it again triggers an immediate
+route refresh. A single vendor route-API failure is isolated and the listener is re-registered with
+a bounded backoff.
 
 “Restore automation after device restart” means that an already enabled automation service is
 restored after `BOOT_COMPLETED` or app replacement. It is not the automation master switch and does
@@ -275,14 +286,13 @@ Read the [architecture document](docs/architecture.md) and
 
 ## Privacy and security
 
-- `INTERNET` is used only to fetch AutoEq's official recommended index and the selected
-  `GraphicEQ` on demand;
+- `INTERNET` is used only for official AutoEq content and this project's GitHub Release metadata;
 - the manifest declares no microphone, camera, location, or media-read permission;
 - the app contains no analytics, advertising, telemetry, remote crash reporting, or upload
   endpoint;
 - it never reads, records, caches, or uploads audio;
-- raw Bluetooth addresses are not stored; stable device keys are derived from a SHA-256 digest of
-  local route identity;
+- raw Bluetooth addresses are not stored; a stable key is derived locally only after the address
+  has been verified against Android's bonded-device inventory;
 - profiles, rules, device display names, and clearable logs stay in app-private storage, subject to
   the user's Android backup settings;
 - report security issues through

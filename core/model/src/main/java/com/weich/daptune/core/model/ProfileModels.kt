@@ -57,6 +57,9 @@ data class OutputRoute(
     val displayName: String,
     val type: OutputRouteType,
     val rawAddressPresent: Boolean = false,
+    val identityKind: OutputRouteIdentityKind = OutputRouteIdentityKind.PERSISTENT,
+    /** Exact keys emitted by older identity algorithms and safe to migrate to [key]. */
+    val legacyKeys: Set<String> = emptySet(),
 ) {
     companion object {
         val Speaker = OutputRoute(
@@ -67,6 +70,11 @@ data class OutputRoute(
 
         fun typeFallback(type: OutputRouteType): String = "type:${type.name.lowercase()}"
     }
+}
+
+enum class OutputRouteIdentityKind {
+    PERSISTENT,
+    TRANSIENT,
 }
 
 data class KnownOutputDevice(
@@ -94,6 +102,8 @@ data class AppSettings(
     val selectedProfileId: String = "builtin.flat",
     val defaultProfileId: String = "builtin.flat",
     val applyAtBoot: Boolean = false,
+    val automaticUpdateChecksEnabled: Boolean = true,
+    val lastUpdateCheckAtEpochMillis: Long = 0L,
     val darkThemeMode: DarkThemeMode = DarkThemeMode.SYSTEM,
 )
 

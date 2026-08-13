@@ -170,6 +170,18 @@ class SelectProfileForRouteUseCaseTest {
         override suspend fun setApplyAtBoot(enabled: Boolean) {
             mutableSettings.value = mutableSettings.value.copy(applyAtBoot = enabled)
         }
+
+        override suspend fun setAutomaticUpdateChecksEnabled(enabled: Boolean) {
+            mutableSettings.value = mutableSettings.value.copy(
+                automaticUpdateChecksEnabled = enabled,
+            )
+        }
+
+        override suspend fun setLastUpdateCheckAtEpochMillis(value: Long) {
+            mutableSettings.value = mutableSettings.value.copy(
+                lastUpdateCheckAtEpochMillis = value,
+            )
+        }
     }
 
     private class RecordingOperationLogRepository : OperationLogRepository {

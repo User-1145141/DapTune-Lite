@@ -4,6 +4,7 @@ import com.weich.daptune.core.model.AppliedSnapshot
 import com.weich.daptune.core.model.DeviceBinding
 import com.weich.daptune.core.model.KnownOutputDevice
 import com.weich.daptune.core.model.OutputRoute
+import com.weich.daptune.core.model.OutputRouteIdentityKind
 import com.weich.daptune.core.model.OutputRouteType
 import com.weich.daptune.core.model.VerificationState
 import com.weich.daptune.domain.DeviceRepository
@@ -50,14 +51,16 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     override suspend fun rememberRoute(route: OutputRoute) {
-        deviceDao.upsertDevice(
-            KnownDeviceEntity(
+        if (route.identityKind != OutputRouteIdentityKind.PERSISTENT) return
+        deviceDao.rememberPersistentDevice(
+            device = KnownDeviceEntity(
                 routeKey = route.key,
                 displayName = route.displayName,
                 routeType = route.type.name,
                 rawAddressPresent = route.rawAddressPresent,
                 lastSeenAtEpochMillis = System.currentTimeMillis(),
             ),
+            legacyRouteKeys = route.legacyKeys.toList(),
         )
     }
 
@@ -66,6 +69,7 @@ class DeviceRepositoryImpl @Inject constructor(
     }
 
     override suspend fun bind(routeKey: String, profileId: String?) {
+        if (routeKey.startsWith(TransientRoutePrefix)) return
         if (profileId == null) {
             deviceDao.deleteBinding(routeKey)
         } else {
@@ -91,5 +95,9 @@ class DeviceRepositoryImpl @Inject constructor(
     override suspend fun markAppliedStateStale() {
         val existing = appliedStateDao.get() ?: return
         appliedStateDao.upsert(existing.copy(verification = VerificationState.STALE.name))
+    }
+
+    private companion object {
+        const val TransientRoutePrefix = "transient:"
     }
 }

@@ -20,6 +20,7 @@ import com.weich.daptune.core.model.OperationLogAction
 import com.weich.daptune.core.model.OperationLogEntry
 import com.weich.daptune.core.model.OperationLogOutcome
 import com.weich.daptune.core.model.OutputRoute
+import com.weich.daptune.core.model.OutputRouteIdentityKind
 import com.weich.daptune.core.model.ProfileApplySource
 import com.weich.daptune.domain.ApplyProfileUseCase
 import com.weich.daptune.domain.AudioRouteMonitor
@@ -35,9 +36,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,32 +88,56 @@ class EqAutomationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ActionStop) {
-            recoveryScheduler.onAutomationStopped()
-            serviceScope.launch {
-                settingsRepository.setAutomationEnabled(false)
-                mainHandler.post(::shutdown)
+        val command = automationServiceCommand(intent?.action)
+        when (command) {
+            AutomationServiceCommand.STOP -> {
+                recoveryScheduler.onAutomationStopped()
+                serviceScope.launch {
+                    settingsRepository.setAutomationEnabled(false)
+                    mainHandler.post(::shutdown)
+                }
+                return START_NOT_STICKY
             }
-            return START_NOT_STICKY
-        }
-
-        val action = intent?.action
-        if (action != ActionStart && action != ActionRecover) {
-            stopSelf(startId)
-            return START_NOT_STICKY
+            AutomationServiceCommand.IGNORE -> {
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+            AutomationServiceCommand.START,
+            AutomationServiceCommand.RECOVER,
+            -> Unit
         }
 
         recoveryScheduler.onAutomationStarted()
         promoteToForeground(lastNotificationText)
-        when (action) {
-            ActionRecover -> if (monitorJob?.isActive != true || !monitorReady) {
-                restartMonitoring(ProfileApplySource.AUTOMATION_RECOVERY)
+        when (command) {
+            AutomationServiceCommand.RECOVER -> {
+                if (monitorJob?.isActive != true || !monitorReady) {
+                    restartMonitoring(ProfileApplySource.AUTOMATION_RECOVERY)
+                } else {
+                    requestCurrentRoute(
+                        force = true,
+                        source = ProfileApplySource.AUTOMATION_RECOVERY,
+                    )
+                }
             }
-            ActionStart -> if (monitorJob?.isActive != true || !monitorReady) {
-                restartMonitoring(ProfileApplySource.AUTOMATION_START)
+            AutomationServiceCommand.START -> {
+                if (monitorJob?.isActive != true || !monitorReady) {
+                    restartMonitoring(ProfileApplySource.AUTOMATION_START)
+                } else {
+                    requestCurrentRoute(
+                        force = false,
+                        source = ProfileApplySource.AUTOMATION_REFRESH,
+                    )
+                }
             }
+            AutomationServiceCommand.STOP,
+            AutomationServiceCommand.IGNORE,
+            -> error("Command was handled before foreground promotion")
         }
-        return START_NOT_STICKY
+        // The process may be reclaimed while the foreground service is active. Android then
+        // recreates the service with a null intent; automationServiceCommand() treats that as a
+        // recovery request and rebuilds the single platform-listener pipeline.
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -128,35 +156,56 @@ class EqAutomationService : Service() {
         lastAppliedCurveHash = null
         val generation = monitorGeneration
         monitorJob = serviceScope.launch {
+            var retryAttempt = 0L
+            var startupSource = initialSource
             try {
-                val initialized = withTimeout(MonitorStartupTimeoutMillis) {
-                    profileRepository.ensureBuiltIns()
-                    if (!settingsRepository.settings.first().automationEnabled) {
-                        mainHandler.post(::shutdown)
-                        return@withTimeout false
+                while (generation == monitorGeneration && currentCoroutineContext().isActive) {
+                    try {
+                        val initialized = withTimeout(MonitorStartupTimeoutMillis) {
+                            profileRepository.ensureBuiltIns()
+                            if (!settingsRepository.settings.first().automationEnabled) {
+                                mainHandler.post(::shutdown)
+                                return@withTimeout false
+                            }
+
+                            // Resolve synchronously once; the event stream has no placeholder value.
+                            processCurrentRouteSafely(
+                                force = true,
+                                source = startupSource,
+                            )
+                            true
+                        }
+                        if (!initialized || generation != monitorGeneration) return@launch
+                        monitorReady = true
+                        routeMonitor.routes.collect { route ->
+                            processRouteSafely(
+                                route = route,
+                                force = false,
+                                source = ProfileApplySource.ROUTE_CHANGE,
+                            )
+                            retryAttempt = 0L
+                        }
+                        error("播放设备监听意外结束")
+                    } catch (timeout: TimeoutCancellationException) {
+                        recordMonitorFailure(timeout)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Throwable) {
+                        recordMonitorFailure(error)
+                    } finally {
+                        if (generation == monitorGeneration) monitorReady = false
                     }
 
-                    // Resolve synchronously once so a stale StateFlow placeholder cannot
-                    // apply the speaker profile while a headset is already active.
-                    processCurrentRouteSafely(
-                        force = true,
-                        source = initialSource,
-                    )
-                }
-                if (!initialized || generation != monitorGeneration) return@launch
-                monitorReady = true
-                routeMonitor.routes.drop(1).collect { route ->
-                    processRouteSafely(
-                        route = route,
-                        force = false,
-                        source = ProfileApplySource.ROUTE_CHANGE,
-                    )
+                    if (generation != monitorGeneration || !currentCoroutineContext().isActive) {
+                        return@launch
+                    }
+                    notify("播放设备监听恢复中")
+                    delay(automationMonitorRetryDelay(retryAttempt))
+                    retryAttempt = (retryAttempt + 1L).coerceAtMost(MaxMonitorRetryAttempt)
+                    startupSource = ProfileApplySource.AUTOMATION_RECOVERY
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (error: Throwable) {
-                recordMonitorFailure(error)
-                notify("自动切换恢复中")
             } finally {
                 if (generation == monitorGeneration) monitorReady = false
             }
@@ -176,21 +225,31 @@ class EqAutomationService : Service() {
     private suspend fun processCurrentRouteSafely(
         force: Boolean,
         source: ProfileApplySource,
-    ): Boolean = processRouteSafely(
-        route = routeMonitor.currentRoute(),
-        force = force,
-        source = source,
-    )
+    ): Boolean = runRouteOperation {
+        processRoute(
+            route = routeMonitor.currentRoute(),
+            force = force,
+            source = source,
+        )
+    }
 
     private suspend fun processRouteSafely(
         route: OutputRoute,
         force: Boolean,
         source: ProfileApplySource,
-    ): Boolean = try {
+    ): Boolean = runRouteOperation {
+        processRoute(route = route, force = force, source = source)
+    }
+
+    private suspend fun runRouteOperation(operation: suspend () -> Unit): Boolean = try {
         withTimeout(RouteOperationTimeoutMillis) {
-            processRoute(route = route, force = force, source = source)
+            operation()
         }
         true
+    } catch (timeout: TimeoutCancellationException) {
+        recordMonitorFailure(timeout)
+        notify("播放设备切换超时 · 等待下一次事件")
+        false
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Throwable) {
@@ -206,6 +265,10 @@ class EqAutomationService : Service() {
     ) = routeProcessingMutex.withLock {
         if (!settingsRepository.settings.first().automationEnabled) {
             mainHandler.post(::shutdown)
+            return@withLock
+        }
+        if (route.identityKind != OutputRouteIdentityKind.PERSISTENT) {
+            notify("需要附近设备权限 · 未切换配置")
             return@withLock
         }
         deviceRepository.rememberRoute(route)
@@ -324,3 +387,24 @@ class EqAutomationService : Service() {
         private const val RouteOperationTimeoutMillis = 10_000L
     }
 }
+
+internal fun automationMonitorRetryDelay(attempt: Long): Long =
+    (attempt.coerceIn(0L, MaxMonitorRetryAttempt) + 1L) * 1_000L
+
+internal enum class AutomationServiceCommand {
+    START,
+    RECOVER,
+    STOP,
+    IGNORE,
+}
+
+internal fun automationServiceCommand(action: String?): AutomationServiceCommand = when (action) {
+    null,
+    EqAutomationService.ActionRecover,
+    -> AutomationServiceCommand.RECOVER
+    EqAutomationService.ActionStart -> AutomationServiceCommand.START
+    EqAutomationService.ActionStop -> AutomationServiceCommand.STOP
+    else -> AutomationServiceCommand.IGNORE
+}
+
+private const val MaxMonitorRetryAttempt = 29L

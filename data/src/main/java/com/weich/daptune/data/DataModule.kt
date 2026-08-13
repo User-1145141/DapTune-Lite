@@ -7,6 +7,7 @@ import com.weich.daptune.domain.DeviceRepository
 import com.weich.daptune.domain.OperationLogRepository
 import com.weich.daptune.domain.ProfileRepository
 import com.weich.daptune.domain.SettingsRepository
+import com.weich.daptune.domain.UpdateRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -33,6 +34,10 @@ abstract class RepositoryBindings {
     @Binds
     @Singleton
     abstract fun bindSettingsRepository(implementation: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindUpdateRepository(implementation: UpdateRepositoryImpl): UpdateRepository
 
     @Binds
     @Singleton

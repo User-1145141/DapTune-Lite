@@ -24,8 +24,8 @@ android {
         applicationId = "com.weich.daptune"
         minSdk = 30
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -99,6 +99,7 @@ dependencies {
     implementation(project(":feature:editor"))
     implementation(project(":feature:profiles"))
     implementation(project(":feature:automation"))
+    implementation(project(":feature:about"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -115,4 +116,5 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.junit)
 }

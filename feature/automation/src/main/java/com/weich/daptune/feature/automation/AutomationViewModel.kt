@@ -167,7 +167,6 @@ class AutomationViewModel @Inject constructor(
     }
 
     fun onNotificationPermissionResult(granted: Boolean) {
-        setEnabled(true)
         if (!granted) {
             messageChannel.trySend("通知已关闭；自动切换仍会在系统的活动应用中运行")
         }

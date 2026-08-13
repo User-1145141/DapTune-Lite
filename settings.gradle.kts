@@ -28,4 +28,5 @@ include(
     ":feature:editor",
     ":feature:profiles",
     ":feature:automation",
+    ":feature:about",
 )

@@ -4,6 +4,29 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-13
+
+### Added
+
+- 新增“关于 DapTune”页面，集中展示版本、项目、许可证与隐私入口；
+- 支持手动检查 GitHub 正式版本，以及默认开启、24 小时限频的自动检查更新。
+
+### Fixed
+
+- Android 12+ 首次启动必须先授予“附近的设备”权限，授权后立即刷新播放路由；
+- 蓝牙设备只有在完整地址能由系统已配对设备清单唯一验证时才会创建历史和专属规则；匿名地址、设备名称和 MediaRouter 包装 ID 不再被误当成设备身份；
+- 已由旧版产生的匿名地址、AudioDevice 回退值和 `DEFAULT_ROUTE` 历史键，会在配置无冲突时事务式迁移到验证后的设备键并删除重复项；
+- 经典蓝牙与 LE Audio 对同一物理设备使用同一隐私哈希键，原始地址不写入数据库；
+- 路由解析、回调注册和单次处理超时均被隔离，监听异常会记录并以有上限的退避自动恢复；
+- 已运行服务收到启动或任务恢复请求时会重新核对当前输出，不再只凭服务存活状态跳过刷新；
+- 前台服务进程被系统回收后会通过同一监听入口恢复，补齐标准蓝牙与 MediaRouter 路由事件；
+- 身份无法验证时自动切换保持现状，不再按名称猜测或写入瞬态设备。
+
+### Release identity
+
+- Android signer certificate SHA-256:
+  `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added
@@ -42,6 +65,7 @@
 - Android signer certificate SHA-256:
   `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
 
-[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/silverpoetry/DapTune/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/silverpoetry/DapTune/releases/tag/v0.1.0

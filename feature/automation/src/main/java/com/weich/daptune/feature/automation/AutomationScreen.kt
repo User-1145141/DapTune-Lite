@@ -83,6 +83,7 @@ import com.weich.daptune.core.designsystem.AppCard
 import com.weich.daptune.core.designsystem.DapTuneTopAppBar
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.KnownOutputDevice
+import com.weich.daptune.core.model.OutputRouteIdentityKind
 import com.weich.daptune.core.model.OutputRouteType
 import com.weich.daptune.core.model.OperationLogAction
 import com.weich.daptune.core.model.OperationLogEntry
@@ -102,6 +103,7 @@ private sealed interface ProfilePickerTarget {
 fun AutomationScreen(
     modifier: Modifier = Modifier,
     viewModel: AutomationViewModel = hiltViewModel(),
+    onOpenAbout: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -110,17 +112,23 @@ fun AutomationScreen(
     var pickerTarget by remember { mutableStateOf<ProfilePickerTarget?>(null) }
     var forgetTarget by remember { mutableStateOf<KnownOutputDevice?>(null) }
     var showOperationLogs by rememberSaveable { mutableStateOf(false) }
-    val notificationPermission = rememberLauncherForActivityResult(
+    var enableAfterNotificationPermission by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted -> viewModel.onNotificationPermissionResult(granted) }
+    ) { granted ->
+        viewModel.onNotificationPermissionResult(granted)
+        if (enableAfterNotificationPermission) viewModel.setEnabled(true)
+        enableAfterNotificationPermission = false
+    }
 
     fun setAutomation(enabled: Boolean) {
-        val needsPermission = enabled &&
+        val notificationPermissionMissing =
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        if (needsPermission) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+        if (enabled && notificationPermissionMissing) {
+            enableAfterNotificationPermission = true
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             viewModel.setEnabled(enabled)
         }
@@ -262,6 +270,8 @@ fun AutomationScreen(
                     Column {
                         visibleDevices.forEachIndexed { index, device ->
                             val assigned = state.profileFor(device.route.key)
+                            val canConfigure =
+                                device.route.identityKind == OutputRouteIdentityKind.PERSISTENT
                             DeviceRuleRow(
                                 device = device,
                                 assignedProfile = assigned,
@@ -269,8 +279,11 @@ fun AutomationScreen(
                                 isCurrent = device.route.key == state.currentRoute.key,
                                 canForget = device.route.key != state.currentRoute.key &&
                                     device.route.type != OutputRouteType.BUILT_IN_SPEAKER,
+                                canConfigure = canConfigure,
                                 onClick = {
-                                    pickerTarget = ProfilePickerTarget.Device(device)
+                                    if (canConfigure) {
+                                        pickerTarget = ProfilePickerTarget.Device(device)
+                                    }
                                 },
                                 onForgetRequest = { forgetTarget = device },
                             )
@@ -334,6 +347,28 @@ fun AutomationScreen(
                             }
                         },
                         modifier = Modifier.clickable { showOperationLogs = true },
+                        colors = transparentListItemColors(),
+                    )
+                }
+            }
+
+            item { SectionHeading("应用", modifier = Modifier.padding(top = 4.dp)) }
+            item {
+                AppCard(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth(),
+                ) {
+                    ListItem(
+                        headlineContent = { Text("关于 DapTune") },
+                        supportingContent = { Text("版本、更新与开源信息") },
+                        leadingContent = {
+                            Icon(Icons.Outlined.Info, contentDescription = null)
+                        },
+                        trailingContent = {
+                            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                        },
+                        modifier = Modifier.clickable(onClick = onOpenAbout),
                         colors = transparentListItemColors(),
                     )
                 }
@@ -630,10 +665,15 @@ private fun DeviceRuleRow(
     defaultProfile: EqProfile?,
     isCurrent: Boolean,
     canForget: Boolean,
+    canConfigure: Boolean,
     onClick: () -> Unit,
     onForgetRequest: () -> Unit,
 ) {
-    val ruleLabel = assignedProfile?.name ?: "跟随默认 · ${defaultProfile?.name ?: "平直"}"
+    val ruleLabel = if (canConfigure) {
+        assignedProfile?.name ?: "跟随默认 · ${defaultProfile?.name ?: "平直"}"
+    } else {
+        "无法验证设备身份"
+    }
     var menuExpanded by remember(device.route.key) { mutableStateOf(false) }
     ListItem(
         headlineContent = {
@@ -668,7 +708,13 @@ private fun DeviceRuleRow(
             )
         },
         trailingContent = {
-            if (canForget) {
+            if (!canConfigure) {
+                Icon(
+                    imageVector = Icons.Outlined.ErrorOutline,
+                    contentDescription = "设备身份无法验证",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            } else if (canForget) {
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(
@@ -699,7 +745,7 @@ private fun DeviceRuleRow(
                 Icon(Icons.Outlined.ChevronRight, contentDescription = null)
             }
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(enabled = canConfigure, onClick = onClick),
         colors = transparentListItemColors(),
     )
 }

@@ -18,4 +18,7 @@ interface AudioRouteMonitor {
     val routes: Flow<OutputRoute>
 
     suspend fun currentRoute(): OutputRoute
+
+    /** Requests an immediate snapshot without waiting for a platform route event. */
+    fun refresh() = Unit
 }

@@ -150,5 +150,9 @@ class ResolveProfileForRouteUseCaseTest {
         override suspend fun setAutomationEnabled(enabled: Boolean) = Unit
 
         override suspend fun setApplyAtBoot(enabled: Boolean) = Unit
+
+        override suspend fun setAutomaticUpdateChecksEnabled(enabled: Boolean) = Unit
+
+        override suspend fun setLastUpdateCheckAtEpochMillis(value: Long) = Unit
     }
 }
