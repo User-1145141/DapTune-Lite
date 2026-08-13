@@ -100,10 +100,7 @@ class EditorViewModel @Inject constructor(
                 deviceRepository.bindings,
                 routeMonitor.routes,
                 deviceRepository.appliedSnapshot,
-            ) { profiles, settings, _, _, snapshot ->
-                // The StateFlow has a speaker placeholder while route discovery settles.
-                // Resolve once from the platform so the editor never loads that placeholder.
-                val route = routeMonitor.currentRoute()
+            ) { profiles, settings, _, route, snapshot ->
                 EditorSources(
                     profiles = profiles,
                     resolvedProfile = resolveProfileForRoute(route),

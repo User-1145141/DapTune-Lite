@@ -174,10 +174,10 @@ requires an audible check.
 
 ## Automation and background behavior
 
-Automation runs only after the user explicitly enables it. The service first resolves the current
-route, then listens for route and Dolby-state events. An unchanged route and curve are not written
-again during the same service lifetime. Exact device rules override the default profile; deleting a
-historical device also removes its device record and rule.
+Automation runs only after the user explicitly enables it. The service first registers route
+monitoring, then immediately resolves and applies the current output. An unchanged route and curve
+are not written again during the same service lifetime. Exact device rules override the default
+profile; deleting a historical device also removes its device record and rule.
 
 On Android 12 and newer, Nearby devices is required before entering the app. A persistent Bluetooth
 key is created only when a complete address is uniquely verified against Android's bonded-device

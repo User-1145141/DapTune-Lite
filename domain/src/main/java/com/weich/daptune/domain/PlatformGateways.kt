@@ -16,6 +16,7 @@ interface DapGateway {
 
 interface AudioRouteMonitor {
     val routes: Flow<OutputRoute>
+    val failures: Flow<Throwable>
 
     suspend fun currentRoute(): OutputRoute
 

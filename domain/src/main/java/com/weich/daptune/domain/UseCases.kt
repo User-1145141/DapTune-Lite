@@ -20,6 +20,7 @@ import com.weich.daptune.core.model.ProfileSource
 import com.weich.daptune.core.model.VerificationState
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 class ApplyProfileUseCase @Inject constructor(
@@ -171,7 +172,13 @@ private fun ProfileApplySource.toLogAction(): OperationLogAction = when (this) {
 }
 
 private suspend fun OperationLogRepository.appendSafely(entry: OperationLogEntry) {
-    runCatching { append(entry) }
+    try {
+        append(entry)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Throwable) {
+        // Operation logging is diagnostic and must not change the audio operation result.
+    }
 }
 
 private fun operationEntry(

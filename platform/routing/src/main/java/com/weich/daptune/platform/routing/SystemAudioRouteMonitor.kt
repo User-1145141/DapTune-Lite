@@ -27,18 +27,26 @@ import com.weich.daptune.domain.AudioRouteMonitor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 
 @Singleton
@@ -48,7 +56,11 @@ class SystemAudioRouteMonitor @Inject constructor(
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val mediaRouter = MediaRouter2.getInstance(context)
     private val bluetoothIdentityResolver = BluetoothIdentityResolver(context)
+    private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val failureEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 4)
+
+    override val failures: Flow<Throwable> = failureEvents.asSharedFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     override val routes: Flow<OutputRoute> = merge(observePlatformEvents(), refreshRequests)
@@ -56,6 +68,12 @@ class SystemAudioRouteMonitor @Inject constructor(
         .debounce(RouteSettleMillis)
         .mapLatest { resolveCurrentRoute() }
         .distinctUntilChanged()
+        .retryWhen { cause, attempt ->
+            failureEvents.emit(cause)
+            delay(routeMonitorRetryDelay(attempt))
+            true
+        }
+        .shareRouteEventsIn(monitorScope)
 
     override suspend fun currentRoute(): OutputRoute = withContext(Dispatchers.Default) {
         resolveCurrentRoute()
@@ -105,7 +123,6 @@ class SystemAudioRouteMonitor @Inject constructor(
             addAction(ActionLeAudioActiveDeviceChanged)
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-            addAction(XiaomiDolbyStateAction)
         }
         val audioCallbackRegistered = runCatching {
             audioManager.registerAudioDeviceCallback(audioCallback, handler)
@@ -307,7 +324,6 @@ class SystemAudioRouteMonitor @Inject constructor(
             "android.bluetooth.action.LE_AUDIO_CONNECTION_STATE_CHANGED"
         const val ActionLeAudioActiveDeviceChanged =
             "android.bluetooth.action.LE_AUDIO_ACTIVE_DEVICE_CHANGED"
-        const val XiaomiDolbyStateAction = "miui.intent.action.ACTION_SYSTEM_UI_DOLBY_EFFECT_SWITCH"
         const val SystemMediaDefaultRouteId =
             "com.android.server.media/.SystemMediaRoute2Provider:DEFAULT_ROUTE"
         val MediaAttributes: AudioAttributes = AudioAttributes.Builder()
@@ -340,5 +356,20 @@ internal fun extractBluetoothHardwareAddress(routeId: String): String? =
 internal fun extractBluetoothReportedAddress(routeId: String): String? =
     BluetoothAddressInRouteId.find(routeId)?.value
 
+internal fun routeMonitorRetryDelay(attempt: Long): Long =
+    (attempt.coerceIn(0L, MaxRouteMonitorRetryAttempt) + 1L) * 1_000L
+
+internal fun Flow<OutputRoute>.shareRouteEventsIn(scope: CoroutineScope): SharedFlow<OutputRoute> =
+    shareIn(
+        scope = scope,
+        started = SharingStarted.WhileSubscribed(
+            stopTimeoutMillis = 0L,
+            replayExpirationMillis = 0L,
+        ),
+        replay = 1,
+    )
+
 private val BluetoothAddressInRouteId =
     Regex("(?i)(?<![0-9a-f])(?:(?:[0-9a-f]{2}:){5}[0-9a-f]{2}|XX:XX:XX:XX:[0-9a-f]{2}:[0-9a-f]{2})(?![0-9a-f])")
+
+private const val MaxRouteMonitorRetryAttempt = 29L

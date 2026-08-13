@@ -64,4 +64,13 @@ class RouteSelectionTest {
         assertEquals("XX:XX:XX:XX:E3:C3", extractBluetoothReportedAddress(routeId))
         assertNull(extractBluetoothHardwareAddress(routeId))
     }
+
+    @Test
+    fun monitorRetryDelayStartsAtOneSecondAndStopsGrowingAtThirtySeconds() {
+        assertEquals(1_000L, routeMonitorRetryDelay(-1L))
+        assertEquals(1_000L, routeMonitorRetryDelay(0L))
+        assertEquals(2_000L, routeMonitorRetryDelay(1L))
+        assertEquals(30_000L, routeMonitorRetryDelay(29L))
+        assertEquals(30_000L, routeMonitorRetryDelay(Long.MAX_VALUE))
+    }
 }

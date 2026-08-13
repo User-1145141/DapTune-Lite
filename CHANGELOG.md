@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-13
+
+### Fixed
+
+- 自动切换服务会在每次启动或恢复时重建唯一的路由监听会话，避免通知仍在但系统回调已经丢失的假活状态；
+- 路由回调先于数据库和 Dolby 写入注册，事件在慢操作期间合并保留最新值，监听源意外结束后由同一会话退避重建；
+- 调音、配置、自动页与服务改为共享同一个无占位初值的路由事件源，不再重复注册四套路由回调或重复查询当前输出；
+- 删除并行维护的监听就绪标记、世代计数、通知文本缓存以及重复的 Dolby 路由事件入口，诊断日志不再阻塞监听恢复；
+- 任务移除恢复只保留已验证的一次性系统请求，移除与其竞争的粘性服务重启路径；
+- 后台协程取消会正确向上传播，不再被非关键操作日志写入吞掉。
+
 ## [0.3.0] - 2026-08-13
 
 ### Added
@@ -65,7 +76,8 @@
 - Android signer certificate SHA-256:
   `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
 
-[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/silverpoetry/DapTune/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/silverpoetry/DapTune/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/silverpoetry/DapTune/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/silverpoetry/DapTune/releases/tag/v0.1.0

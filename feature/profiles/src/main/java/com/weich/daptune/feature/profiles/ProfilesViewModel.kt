@@ -80,8 +80,7 @@ class ProfilesViewModel @Inject constructor(
                 settingsRepository.settings,
                 deviceRepository.bindings,
                 routeMonitor.routes,
-            ) { profiles, settings, _, _ ->
-                val route = routeMonitor.currentRoute()
+            ) { profiles, settings, _, route ->
                 val selectedProfileId = resolveProfileForRoute(route)?.id
                     ?: settings.selectedProfileId
                 ProfilesUiState(profiles, selectedProfileId, route)
