@@ -20,6 +20,7 @@ import com.weich.daptune.domain.ProfileRepository
 import com.weich.daptune.domain.OperationLogRepository
 import com.weich.daptune.domain.ResolveProfileForRouteUseCase
 import com.weich.daptune.domain.SettingsRepository
+import com.weich.daptune.domain.runSuspendCatching
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
@@ -133,7 +134,7 @@ class AutomationViewModel @Inject constructor(
 
     fun setEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            runCatching {
+            runSuspendCatching {
                 settingsRepository.setAutomationEnabled(enabled)
                 if (enabled) controller.start() else controller.stop()
             }.onSuccess {
@@ -174,7 +175,7 @@ class AutomationViewModel @Inject constructor(
 
     fun setApplyAtBoot(enabled: Boolean) {
         viewModelScope.launch {
-            runCatching { settingsRepository.setApplyAtBoot(enabled) }
+            runSuspendCatching { settingsRepository.setApplyAtBoot(enabled) }
                 .onSuccess {
                     appendOperationLog(
                         OperationLogEntry(
@@ -196,7 +197,7 @@ class AutomationViewModel @Inject constructor(
 
     fun setDefaultProfile(profileId: String) {
         viewModelScope.launch {
-            runCatching {
+            runSuspendCatching {
                 settingsRepository.setDefaultProfile(profileId)
                 applyResolvedProfileToCurrentRoute(ProfileApplySource.DEFAULT_RULE_CHANGE)
             }.onSuccess { application ->
@@ -213,7 +214,7 @@ class AutomationViewModel @Inject constructor(
 
     fun bind(routeKey: String, profileId: String?) {
         viewModelScope.launch {
-            runCatching {
+            runSuspendCatching {
                 deviceRepository.bind(routeKey, profileId)
                 val currentRoute = routeMonitor.currentRoute()
                 if (routeKey == currentRoute.key) {
@@ -258,7 +259,7 @@ class AutomationViewModel @Inject constructor(
                 messageChannel.send("当前设备无法从历史记录中删除")
                 return@launch
             }
-            runCatching { deviceRepository.forgetRoute(routeKey) }
+            runSuspendCatching { deviceRepository.forgetRoute(routeKey) }
                 .onSuccess {
                     appendOperationLog(
                         OperationLogEntry(
@@ -277,13 +278,13 @@ class AutomationViewModel @Inject constructor(
 
     fun clearOperationLogs() {
         viewModelScope.launch {
-            runCatching { operationLogRepository.clear() }
+            runSuspendCatching { operationLogRepository.clear() }
                 .onFailure { error -> messageChannel.send(error.message ?: "无法清空记录") }
         }
     }
 
     private suspend fun appendOperationLog(entry: OperationLogEntry) {
-        runCatching { operationLogRepository.append(entry) }
+        runSuspendCatching { operationLogRepository.append(entry) }
     }
 
     private suspend fun applyResolvedProfileToCurrentRoute(

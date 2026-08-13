@@ -8,6 +8,7 @@ import com.weich.daptune.core.model.OperationLogEntry
 import com.weich.daptune.core.model.OperationLogOutcome
 import com.weich.daptune.domain.OperationLogRepository
 import com.weich.daptune.domain.SettingsRepository
+import com.weich.daptune.domain.runSuspendCatching
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +34,7 @@ class BootReceiver : BroadcastReceiver() {
                 if (shouldStart) {
                     runCatching { automationController.start() }
                         .onFailure { error ->
-                            runCatching {
+                            runSuspendCatching {
                                 operationLogs.append(
                                     OperationLogEntry(
                                         occurredAtEpochMillis = System.currentTimeMillis(),

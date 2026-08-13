@@ -10,6 +10,7 @@ import com.weich.daptune.domain.SettingsRepository
 import com.weich.daptune.feature.automation.AutomationController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -130,6 +131,8 @@ class AppViewModel @Inject constructor(
                         },
                     )
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 mutableState.update {
                     it.copy(

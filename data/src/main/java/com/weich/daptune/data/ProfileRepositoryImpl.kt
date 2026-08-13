@@ -12,34 +12,47 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Singleton
 class ProfileRepositoryImpl @Inject constructor(
     private val profileDao: ProfileDao,
 ) : ProfileRepository {
+    private val builtInsInitialization = Mutex()
+
+    @Volatile
+    private var builtInsInitialized = false
+
     override val profiles: Flow<List<EqProfile>> = profileDao.observeAll().map { entities ->
         entities.map { entity -> entity.toModel() }.withCustomProfilesFirst()
     }
 
     override suspend fun ensureBuiltIns() {
-        val now = System.currentTimeMillis()
-        val currentBuiltIns = BuiltInPresets.all
-        profileDao.upsertAll(
-            currentBuiltIns.map { preset ->
-                val existing = profileDao.getById(preset.id)
-                ProfileEntity(
-                    id = preset.id,
-                    name = preset.name,
-                    curveQ4 = CurveBlobCodec.encode(preset.curve),
-                    builtIn = true,
-                    source = ProfileSource.BUILT_IN.name,
-                    sortOrder = preset.sortOrder,
-                    createdAtEpochMillis = existing?.createdAtEpochMillis ?: now,
-                    updatedAtEpochMillis = now,
-                )
-            },
-        )
-        profileDao.deleteObsoleteBuiltIns(currentBuiltIns.map { it.id })
+        if (builtInsInitialized) return
+        builtInsInitialization.withLock {
+            if (builtInsInitialized) return@withLock
+
+            val now = System.currentTimeMillis()
+            val currentBuiltIns = BuiltInPresets.all
+            profileDao.upsertAll(
+                currentBuiltIns.map { preset ->
+                    val existing = profileDao.getById(preset.id)
+                    ProfileEntity(
+                        id = preset.id,
+                        name = preset.name,
+                        curveQ4 = CurveBlobCodec.encode(preset.curve),
+                        builtIn = true,
+                        source = ProfileSource.BUILT_IN.name,
+                        sortOrder = preset.sortOrder,
+                        createdAtEpochMillis = existing?.createdAtEpochMillis ?: now,
+                        updatedAtEpochMillis = now,
+                    )
+                },
+            )
+            profileDao.deleteObsoleteBuiltIns(currentBuiltIns.map { it.id })
+            builtInsInitialized = true
+        }
     }
 
     override suspend fun getProfile(id: String): EqProfile? = profileDao.getById(id)?.toModel()

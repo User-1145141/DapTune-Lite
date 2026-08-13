@@ -19,6 +19,7 @@ import com.weich.daptune.domain.ResolveProfileForRouteUseCase
 import com.weich.daptune.domain.SaveProfileUseCase
 import com.weich.daptune.domain.SelectProfileForRouteUseCase
 import com.weich.daptune.domain.SettingsRepository
+import com.weich.daptune.domain.runSuspendCatching
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -91,7 +92,7 @@ class ProfilesViewModel @Inject constructor(
     fun select(profile: EqProfile) {
         val route = mutableState.value.currentRoute
         viewModelScope.launch {
-            runCatching { selectProfileForRoute(profile.id, route) }
+            runSuspendCatching { selectProfileForRoute(profile.id, route) }
                 .onSuccess { result ->
                     messageChannel.send(result.selectionMessage(profile.name))
                 }
@@ -102,7 +103,7 @@ class ProfilesViewModel @Inject constructor(
     fun duplicate(profile: EqProfile) {
         val route = mutableState.value.currentRoute
         viewModelScope.launch {
-            runCatching { duplicateProfile(profile, profile.name) }
+            runSuspendCatching { duplicateProfile(profile, profile.name) }
                 .onSuccess { copy ->
                     selectProfileForRoute(copy.id, route)
                     messageChannel.send("已创建“${copy.name}”")
@@ -119,7 +120,7 @@ class ProfilesViewModel @Inject constructor(
     ) {
         val route = mutableState.value.currentRoute
         viewModelScope.launch {
-            runCatching {
+            runSuspendCatching {
                 val imported = importCurve.parse(text, fileName, format)
                 val curve = importCurve.convert(imported, overflowMode)
                 val saved = saveProfile(
@@ -233,7 +234,7 @@ class ProfilesViewModel @Inject constructor(
         val route = mutableState.value.currentRoute
         val wasSelected = mutableState.value.selectedProfileId == profile.id
         viewModelScope.launch {
-            runCatching { profileRepository.deleteProfile(profile.id) }
+            runSuspendCatching { profileRepository.deleteProfile(profile.id) }
                 .onSuccess {
                     if (wasSelected) {
                         selectProfileForRoute("builtin.flat", route)

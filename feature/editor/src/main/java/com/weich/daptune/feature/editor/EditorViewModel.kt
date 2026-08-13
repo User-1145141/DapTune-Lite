@@ -20,6 +20,7 @@ import com.weich.daptune.domain.ResolveProfileForRouteUseCase
 import com.weich.daptune.domain.SaveProfileUseCase
 import com.weich.daptune.domain.SelectProfileForRouteUseCase
 import com.weich.daptune.domain.SettingsRepository
+import com.weich.daptune.domain.runSuspendCatching
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
@@ -132,7 +133,7 @@ class EditorViewModel @Inject constructor(
             )
         }
         viewModelScope.launch {
-            runCatching { selectProfileForRoute(profile.id, route) }
+            runSuspendCatching { selectProfileForRoute(profile.id, route) }
                 .onSuccess { result ->
                     eventChannel.send(EditorEvent.Message(result.selectionMessage(profile.name)))
                 }
@@ -180,7 +181,7 @@ class EditorViewModel @Inject constructor(
     fun save(name: String, overwrite: Boolean) {
         val current = mutableState.value
         viewModelScope.launch {
-            runCatching {
+            runSuspendCatching {
                 saveProfile(
                     existingId = if (overwrite) current.selectedProfile?.takeUnless(EqProfile::isBuiltIn)?.id else null,
                     name = name,

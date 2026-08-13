@@ -70,6 +70,7 @@ import com.weich.daptune.core.designsystem.formatGain
 import com.weich.daptune.core.eq.CurveFileCodec
 import com.weich.daptune.core.eq.CurveImportFormat
 import com.weich.daptune.core.model.EqProfile
+import com.weich.daptune.domain.runSuspendCatching
 import java.io.Reader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -95,7 +96,7 @@ fun ProfilesScreen(
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
-            runCatching {
+            runSuspendCatching {
                 withContext(Dispatchers.IO) {
                     val resolver = context.contentResolver
                     val text = resolver.openInputStream(uri)

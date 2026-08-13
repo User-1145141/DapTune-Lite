@@ -35,8 +35,8 @@ internal class AutomationRouteSession(
                 routes
                     .buffer(Channel.CONFLATED)
                     .collect { route ->
-                        // Collecting the cold source registers platform callbacks before any
-                        // database or DAP work can suspend this downstream consumer.
+                        // The first shared-route value proves that the underlying platform
+                        // callbacks are active before database or DAP work can suspend here.
                         if (firstRoute) prepare()
                         processRoute(
                             route,
