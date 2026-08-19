@@ -41,6 +41,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -153,6 +154,22 @@ class EqAutomationService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * MIUI removes this process' MediaRouter2 registration when the app task is swiped away,
+     * even though the started foreground service and its process remain alive. Recreate the
+     * single route-monitor session after the task-removal transaction has finished. This is a
+     * lifecycle repair for the existing listener, not a second recovery mechanism.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        mainHandler.post {
+            if (!serviceScope.isActive) return@post
+            restoreJob?.cancel()
+            restoreJob = null
+            replaceMonitoringSession(ProfileApplySource.AUTOMATION_RECOVERY)
+        }
+    }
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(dolbyStateReceiver) }
