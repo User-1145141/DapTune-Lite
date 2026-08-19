@@ -10,6 +10,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -84,6 +85,34 @@ class AutomationRouteSessionTest {
             ),
             observations,
         )
+    }
+
+    @Test
+    fun preparationTimeoutRestartsThePlatformSubscription() = runBlocking {
+        var subscriptions = 0
+        val recovered = CompletableDeferred<ProfileApplySource>()
+        val job = launch {
+            AutomationRouteSession(
+                routes = flow {
+                    subscriptions += 1
+                    emit(OutputRoute.Speaker)
+                    awaitCancellation()
+                },
+                prepare = {
+                    if (subscriptions == 1) {
+                        withTimeout(1L) { awaitCancellation() }
+                    }
+                },
+                processRoute = { _, _, source -> recovered.complete(source) },
+                onFailure = {},
+                waitBeforeRetry = {},
+            ).run(ProfileApplySource.AUTOMATION_RECOVERY)
+        }
+
+        assertEquals(ProfileApplySource.AUTOMATION_RECOVERY, recovered.await())
+        job.cancelAndJoin()
+
+        assertEquals(2, subscriptions)
     }
 
     @Test

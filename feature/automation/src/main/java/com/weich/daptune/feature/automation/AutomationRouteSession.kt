@@ -3,6 +3,7 @@ package com.weich.daptune.feature.automation
 import com.weich.daptune.core.model.OutputRoute
 import com.weich.daptune.core.model.ProfileApplySource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -47,6 +48,14 @@ internal class AutomationRouteSession(
                         retryAttempt = 0L
                     }
                 error("播放设备监听意外结束")
+            } catch (timeout: TimeoutCancellationException) {
+                // A startup timeout belongs to the monitored session, not to the parent service.
+                // Treat it like any other recoverable monitor failure so the platform callbacks
+                // are registered again instead of leaving a foreground service without a listener.
+                onFailure(timeout)
+                waitBeforeRetry(retryAttempt)
+                retryAttempt = (retryAttempt + 1L).coerceAtMost(MaxMonitorRetryAttempt)
+                firstRouteSource = ProfileApplySource.AUTOMATION_RECOVERY
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
