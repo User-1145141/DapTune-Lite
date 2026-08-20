@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-20
+
+### Fixed
+
+- 修复 MIUI/HyperOS 从最近任务划掉应用后，前台服务仍在运行但 `MediaRouter2` 播放设备监听已被系统注销，导致自动切换停止的问题；
+- 任务移除时重建现有的唯一监听会话，保留当前自动切换状态和前台通知，不引入额外轮询或重复后台组件。
+
 ## [0.3.2] - 2026-08-14
 
 ### Fixed
@@ -88,7 +95,8 @@
 - Android signer certificate SHA-256:
   `79:62:1F:C9:4C:0C:56:C8:10:8C:BE:C8:32:28:81:7C:D0:6A:E6:1B:05:26:92:53:C3:2D:8D:D2:60:89:4E:F0`.
 
-[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/silverpoetry/DapTune/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/silverpoetry/DapTune/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/silverpoetry/DapTune/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/silverpoetry/DapTune/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/silverpoetry/DapTune/compare/v0.2.0...v0.3.0
