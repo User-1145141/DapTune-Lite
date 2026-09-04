@@ -242,8 +242,9 @@ private fun ThresholdLimitDialog(
     val threshold = input.replace(',', '.').toDoubleOrNull()?.takeIf(Double::isFinite)
     val error = when {
         threshold == null -> "请输入有效数值"
-        threshold > com.weich.daptune.core.model.EqCurve.MAX_BOOST_DB ->
-            "不能高于 +${com.weich.daptune.core.model.EqCurve.MAX_BOOST_DB} dB"
+        threshold !in com.weich.daptune.core.model.EqCurve.MIN_GAIN_DB.toDouble()..
+            com.weich.daptune.core.model.EqCurve.MAX_BOOST_DB.toDouble() ->
+            "范围必须为 ${com.weich.daptune.core.model.EqCurve.MIN_GAIN_DB}..+${com.weich.daptune.core.model.EqCurve.MAX_BOOST_DB} dB"
         else -> null
     }
     AlertDialog(
@@ -394,7 +395,7 @@ private fun BandEditorCard(
             ) {
                 Text("20 段均衡器", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "0.5 dB 步进",
+                    "1/16 dB 步进",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
