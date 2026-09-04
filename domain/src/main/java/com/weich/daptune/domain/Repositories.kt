@@ -2,8 +2,6 @@ package com.weich.daptune.domain
 
 import com.weich.daptune.core.model.AppliedSnapshot
 import com.weich.daptune.core.model.AppSettings
-import com.weich.daptune.core.model.AppRelease
-import com.weich.daptune.core.model.AutoEqProfile
 import com.weich.daptune.core.model.DeviceBinding
 import com.weich.daptune.core.model.EqCurve
 import com.weich.daptune.core.model.EqProfile
@@ -30,13 +28,6 @@ interface ProfileRepository {
     suspend fun deleteProfile(id: String)
 }
 
-interface AutoEqRepository {
-    /** Searches the locally cached upstream index. The query itself is never sent to a server. */
-    suspend fun search(query: String, limit: Int = 60): List<AutoEqProfile>
-
-    /** Downloads the canonical GraphicEQ result for [profile]. */
-    suspend fun downloadGraphicEq(profile: AutoEqProfile): String
-}
 
 interface DeviceRepository {
     val knownDevices: Flow<List<KnownOutputDevice>>
@@ -67,14 +58,9 @@ interface SettingsRepository {
 
     suspend fun setApplyAtBoot(enabled: Boolean)
 
-    suspend fun setAutomaticUpdateChecksEnabled(enabled: Boolean)
 
-    suspend fun setLastUpdateCheckAtEpochMillis(value: Long)
 }
 
-interface UpdateRepository {
-    suspend fun latestRelease(): AppRelease
-}
 
 interface OperationLogRepository {
     val entries: Flow<List<OperationLogEntry>>
