@@ -5,8 +5,8 @@ import kotlin.math.roundToInt
 /**
  * Immutable 20-band curve using Dolby's signed Q4 dB representation.
  *
- * Dolby limits boost to +10 dB. Attenuation has no product-level lower bound;
- * the signed Int transport representation is the only technical boundary.
+ * The device curve is represented as signed Q4 dB values (1/16 dB per unit).
+ * The supported adjustment range is symmetric at -36 dB..+36 dB.
  */
 class EqCurve private constructor(
     private val gainsQ4: IntArray,
@@ -16,8 +16,8 @@ class EqCurve private constructor(
             "Expected ${DapBandPlan.bandCount} gains, got ${gainsQ4.size}"
         }
         gainsQ4.forEachIndexed { index, gain ->
-            require(gain <= MAX_BOOST_Q4) {
-                "Band $index exceeds +$MAX_BOOST_DB dB: $gain Q4"
+            require(gain in MIN_GAIN_Q4..MAX_BOOST_Q4) {
+                "Band $index is outside ${MIN_GAIN_DB}..+${MAX_BOOST_DB} dB: $gain Q4"
             }
         }
     }
@@ -34,7 +34,7 @@ class EqCurve private constructor(
 
     fun withGainQ4(index: Int, gainQ4: Int): EqCurve {
         require(index in 0 until DapBandPlan.bandCount)
-        require(gainQ4 <= MAX_BOOST_Q4)
+        require(gainQ4 in MIN_GAIN_Q4..MAX_BOOST_Q4)
         if (gainsQ4[index] == gainQ4) return this
         return ofQ4(gainsQ4.copyOf().also { it[index] = gainQ4 })
     }
@@ -50,8 +50,10 @@ class EqCurve private constructor(
 
     companion object {
         const val Q4_PER_DB = 16
-        const val MAX_BOOST_DB = 10
+        const val MAX_BOOST_DB = 36
+        const val MIN_GAIN_DB = -36
         const val MAX_BOOST_Q4 = MAX_BOOST_DB * Q4_PER_DB
+        const val MIN_GAIN_Q4 = MIN_GAIN_DB * Q4_PER_DB
 
         fun flat(): EqCurve = EqCurve(IntArray(DapBandPlan.bandCount))
 
@@ -66,7 +68,7 @@ class EqCurve private constructor(
                 IntArray(gainsDb.size) { index ->
                     (gainsDb[index] * Q4_PER_DB)
                         .roundToInt()
-                        .coerceAtMost(MAX_BOOST_Q4)
+                        .coerceIn(MIN_GAIN_Q4, MAX_BOOST_Q4)
                 },
             )
         }
