@@ -544,14 +544,13 @@ fun formatGain(valueQ4: Int): String {
     val db = valueQ4.toDouble() / EqCurve.Q4_PER_DB
     return when {
         valueQ4 == 0 -> "0"
-        valueQ4 % EqCurve.Q4_PER_DB == 0 -> "%+.0f".format(db)
-        else -> "%+.1f".format(db)
+        else -> "%+.4f".format(db).trimEnd('0').trimEnd('.')
     }
 }
 
 private fun snapGainQ4(valueQ4: Int): Int =
     ((valueQ4.toDouble() / GainStepQ4).roundToLong() * GainStepQ4)
-        .coerceIn(Int.MIN_VALUE.toLong(), EqCurve.MAX_BOOST_Q4.toLong())
+        .coerceIn(EqCurve.MIN_GAIN_Q4.toLong(), EqCurve.MAX_BOOST_Q4.toLong())
         .toInt()
 
 internal fun gainQ4ForTrackPosition(
