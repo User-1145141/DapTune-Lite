@@ -3,7 +3,6 @@ package com.weich.daptune.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.weich.daptune.core.model.AppSettings
@@ -32,8 +31,6 @@ class SettingsRepositoryImpl @Inject constructor(
                 selectedProfileId = preferences[SelectedProfile] ?: "builtin.flat",
                 defaultProfileId = preferences[DefaultProfile] ?: "builtin.flat",
                 applyAtBoot = preferences[ApplyAtBoot] ?: false,
-                automaticUpdateChecksEnabled = preferences[AutomaticUpdateChecksEnabled] ?: true,
-                lastUpdateCheckAtEpochMillis = preferences[LastUpdateCheckAt] ?: 0L,
             )
         }
 
@@ -53,20 +50,11 @@ class SettingsRepositoryImpl @Inject constructor(
         context.dapTuneDataStore.edit { it[ApplyAtBoot] = enabled }
     }
 
-    override suspend fun setAutomaticUpdateChecksEnabled(enabled: Boolean) {
-        context.dapTuneDataStore.edit { it[AutomaticUpdateChecksEnabled] = enabled }
-    }
-
-    override suspend fun setLastUpdateCheckAtEpochMillis(value: Long) {
-        context.dapTuneDataStore.edit { it[LastUpdateCheckAt] = value }
-    }
 
     private companion object {
         val AutomationEnabled = booleanPreferencesKey("automation_enabled")
         val SelectedProfile = stringPreferencesKey("selected_profile_id")
         val DefaultProfile = stringPreferencesKey("default_profile_id")
         val ApplyAtBoot = booleanPreferencesKey("apply_at_boot")
-        val AutomaticUpdateChecksEnabled = booleanPreferencesKey("automatic_update_checks_enabled")
-        val LastUpdateCheckAt = longPreferencesKey("last_update_check_at")
     }
 }
