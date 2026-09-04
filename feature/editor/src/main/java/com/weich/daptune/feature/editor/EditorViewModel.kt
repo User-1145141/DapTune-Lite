@@ -148,7 +148,10 @@ class EditorViewModel @Inject constructor(
     fun setGain(index: Int, valueQ4: Int) {
         mutableState.update {
             it.copy(
-                curve = it.curve.withGainQ4(index, valueQ4.coerceAtMost(EqCurve.MAX_BOOST_Q4)),
+                curve = it.curve.withGainQ4(
+                    index,
+                    valueQ4.coerceIn(EqCurve.MIN_GAIN_Q4, EqCurve.MAX_BOOST_Q4),
+                ),
                 selectedBand = index,
             )
         }
