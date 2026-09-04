@@ -44,8 +44,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,10 +61,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.weich.daptune.core.designsystem.DapTuneTheme
 import com.weich.daptune.feature.about.AboutScreen
-import com.weich.daptune.feature.about.AboutUiState
 import com.weich.daptune.feature.automation.AutomationScreen
 import com.weich.daptune.feature.editor.EditorScreen
 import com.weich.daptune.feature.profiles.ProfilesScreen
@@ -84,7 +82,7 @@ class MainActivity : ComponentActivity() {
                     onPermissionGranted = appViewModel::onBluetoothPermissionGranted,
                 ) {
                     LaunchedEffect(Unit) { appViewModel.restoreAutomation() }
-                    DapTuneApp(appViewModel)
+                    DapTuneApp()
                 }
             }
         }
@@ -106,35 +104,14 @@ private enum class AppDestination(
 }
 
 @Composable
-private fun DapTuneApp(appViewModel: AppViewModel) {
-    val state by appViewModel.state.collectAsStateWithLifecycle()
+private fun DapTuneApp() {
     val context = LocalContext.current
     var showAbout by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        appViewModel.checkForUpdatesAutomatically(BuildConfig.VERSION_NAME)
-    }
 
     if (showAbout) {
         AboutScreen(
             versionName = BuildConfig.VERSION_NAME,
-            state = AboutUiState(
-                automaticUpdateChecksEnabled = state.automaticUpdateChecksEnabled,
-                lastUpdateCheckAtEpochMillis = state.lastUpdateCheckAtEpochMillis,
-                updateCheckInProgress = state.updateCheckInProgress,
-                updateCheckCompleted = state.updateCheckCompleted,
-                latestRelease = state.latestRelease,
-                updateAvailable = state.updateAvailable,
-                updateCheckError = state.updateCheckError,
-            ),
             onBack = { showAbout = false },
-            onCheckForUpdates = {
-                appViewModel.checkForUpdatesNow(BuildConfig.VERSION_NAME)
-            },
-            onAutomaticUpdateChecksChanged = { enabled ->
-                appViewModel.setAutomaticUpdateChecksEnabled(enabled, BuildConfig.VERSION_NAME)
-            },
-            onOpenRelease = { openUrl(context, it) },
             onOpenProject = { openUrl(context, ProjectUrl) },
             onOpenLicense = { openUrl(context, LicenseUrl) },
             onOpenPrivacyPolicy = { openUrl(context, PrivacyUrl) },
@@ -143,26 +120,6 @@ private fun DapTuneApp(appViewModel: AppViewModel) {
         MainPager(onOpenAbout = { showAbout = true })
     }
 
-    state.pendingUpdateAnnouncement?.let { release ->
-        AlertDialog(
-            onDismissRequest = { appViewModel.consumeUpdateAnnouncement(release.tagName) },
-            title = { Text("发现新版本 ${release.tagName}") },
-            text = { Text("可前往 GitHub Release 查看并下载正式安装包。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        appViewModel.consumeUpdateAnnouncement(release.tagName)
-                        openUrl(context, release.releasePageUrl)
-                    },
-                ) { Text("查看更新") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { appViewModel.consumeUpdateAnnouncement(release.tagName) },
-                ) { Text("稍后") }
-            },
-        )
-    }
 }
 
 @Composable
@@ -206,7 +163,7 @@ private fun MainPager(onOpenAbout: () -> Unit) {
         ) {
             when (destinations[it]) {
                 AppDestination.Editor -> EditorScreen()
-                AppDestination.Profiles -> ProfilesScreen(isActive = pagerState.currentPage == it)
+                AppDestination.Profiles -> ProfilesScreen()
                 AppDestination.Automation -> AutomationScreen(onOpenAbout = onOpenAbout)
             }
         }
