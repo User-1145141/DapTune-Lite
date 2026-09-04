@@ -6,10 +6,10 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 enum class OverflowMode {
-    /** Scale the entire curve when its positive peak exceeds +10 dB. */
+    /** Scale the entire curve when either edge of the ±36 dB range is exceeded. */
     FIT,
 
-    /** Clamp only values above +10 dB; attenuation remains unchanged. */
+    /** Clamp values outside the supported -36 dB..+36 dB range. */
     CLAMP,
 }
 
@@ -33,7 +33,7 @@ object EqTransforms {
         return EqCurve.ofQ4(
             gainsQ4.map { gainQ4 ->
                 (gainQ4.toLong() - peakQ4.toLong())
-                    .coerceAtLeast(Int.MIN_VALUE.toLong())
+                    .coerceIn(EqCurve.MIN_GAIN_Q4.toLong(), EqCurve.MAX_BOOST_Q4.toLong())
                     .toInt()
             },
         )
@@ -56,18 +56,18 @@ object EqTransforms {
     /**
      * Hard-limits every band above [thresholdDb] without changing lower bands.
      *
-     * The product has no artificial attenuation floor, so negative thresholds are valid.
-     * Dolby's +10 dB boost ceiling remains the only user-facing upper bound.
+     * The supported curve range is -36 dB..+36 dB, so the threshold must be inside
+     * that range.
      */
     fun limitMaximum(curve: EqCurve, thresholdDb: Double): EqCurve {
         require(thresholdDb.isFinite()) { "Threshold must be finite" }
-        require(thresholdDb <= EqCurve.MAX_BOOST_DB) {
-            "Threshold exceeds +${EqCurve.MAX_BOOST_DB} dB"
+        require(thresholdDb in EqCurve.MIN_GAIN_DB.toDouble()..EqCurve.MAX_BOOST_DB.toDouble()) {
+            "Threshold must be within ${EqCurve.MIN_GAIN_DB}..+${EqCurve.MAX_BOOST_DB} dB"
         }
         // Round toward attenuation so the represented Q4 value never exceeds the requested cap.
         val thresholdQ4 = floor(thresholdDb * EqCurve.Q4_PER_DB)
             .toLong()
-            .coerceAtLeast(Int.MIN_VALUE.toLong())
+            .coerceIn(EqCurve.MIN_GAIN_Q4.toLong(), EqCurve.MAX_BOOST_Q4.toLong())
             .toInt()
         return EqCurve.ofQ4(curve.toQ4List().map { it.coerceAtMost(thresholdQ4) })
     }
@@ -96,15 +96,18 @@ object EqTransforms {
 
         val minimum = gainsDb.min()
         val maximum = gainsDb.max()
-        val limit = EqCurve.MAX_BOOST_DB.toDouble()
-        val exceedsLimit = maximum > limit
+        val maxLimit = EqCurve.MAX_BOOST_DB.toDouble()
+        val minLimit = EqCurve.MIN_GAIN_DB.toDouble()
+        val exceedsLimit = maximum > maxLimit || minimum < minLimit
         val adjusted = if (!exceedsLimit) {
             gainsDb
         } else {
             when (overflowMode) {
-                OverflowMode.CLAMP -> gainsDb.map { it.coerceAtMost(limit) }
+                OverflowMode.CLAMP -> gainsDb.map { it.coerceIn(minLimit, maxLimit) }
                 OverflowMode.FIT -> {
-                    val factor = limit / maximum
+                    val positiveFactor = if (maximum > maxLimit) maxLimit / maximum else 1.0
+                    val negativeFactor = if (minimum < minLimit) minLimit / minimum else 1.0
+                    val factor = minOf(positiveFactor, negativeFactor)
                     gainsDb.map { it * factor }
                 }
             }
@@ -113,7 +116,7 @@ object EqTransforms {
         val q4 = adjusted.map { gain ->
             (gain * EqCurve.Q4_PER_DB)
                 .roundToInt()
-                .coerceAtMost(EqCurve.MAX_BOOST_Q4)
+                .coerceIn(EqCurve.MIN_GAIN_Q4, EqCurve.MAX_BOOST_Q4)
         }
         return CurveConversion(
             curve = EqCurve.ofQ4(q4),
