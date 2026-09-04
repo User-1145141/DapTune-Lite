@@ -6,7 +6,6 @@ import com.weich.daptune.core.eq.EqTransforms
 import com.weich.daptune.core.eq.ImportedCurve
 import com.weich.daptune.core.eq.OverflowMode
 import com.weich.daptune.core.model.AppliedSnapshot
-import com.weich.daptune.core.model.AutoEqProfile
 import com.weich.daptune.core.model.DapApplyVerification
 import com.weich.daptune.core.model.DapApplyResult
 import com.weich.daptune.core.model.EqCurve
@@ -249,40 +248,6 @@ class ImportCurveUseCase @Inject constructor() {
         EqTransforms.quantize(imported.gainsDb, overflowMode).curve
 }
 
-data class AutoEqImportResult(
-    val profile: EqProfile,
-    val adjustedToBoostLimit: Boolean,
-    val warnings: List<String>,
-)
-
-class ImportAutoEqProfileUseCase @Inject constructor(
-    private val autoEqRepository: AutoEqRepository,
-    private val importCurve: ImportCurveUseCase,
-    private val saveProfile: SaveProfileUseCase,
-) {
-    suspend operator fun invoke(
-        profile: AutoEqProfile,
-        overflowMode: OverflowMode = OverflowMode.FIT,
-    ): AutoEqImportResult {
-        val text = autoEqRepository.downloadGraphicEq(profile)
-        val imported = importCurve.parse(
-            text = text,
-            fileName = "${profile.name} GraphicEQ.txt",
-            format = CurveImportFormat.GRAPHIC_EQ,
-        )
-        val saved = saveProfile(
-            existingId = null,
-            name = profile.name,
-            curve = importCurve.convert(imported, overflowMode),
-            source = ProfileSource.AUTO_EQ,
-        )
-        return AutoEqImportResult(
-            profile = saved,
-            adjustedToBoostLimit = imported.exceedsLimit,
-            warnings = imported.warnings,
-        )
-    }
-}
 
 class DuplicateProfileUseCase @Inject constructor(
     private val profileRepository: ProfileRepository,
