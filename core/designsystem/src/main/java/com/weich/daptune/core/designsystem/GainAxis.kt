@@ -64,7 +64,7 @@ internal fun gainAxisForMinimum(minimumQ4: Int): GainAxis {
     val majorStepQ4 = niceMajorStepQ4(requiredRangeQ4)
     val alignedMinimumQ4 =
         (Math.floorDiv(requiredMinimumQ4, majorStepQ4.toLong()) * majorStepQ4.toLong())
-            .coerceAtLeast(Int.MIN_VALUE.toLong())
+            .coerceIn(EqCurve.MIN_GAIN_Q4.toLong(), Int.MAX_VALUE.toLong())
             .toInt()
     val minorStepQ4 =
         (ceil(majorStepQ4.toDouble() / 10.0 / GainStepQ4) * GainStepQ4)
@@ -94,7 +94,7 @@ private fun niceMajorStepQ4(rangeQ4: Long): Int {
         .roundToInt()
 }
 
-internal const val GainStepQ4 = EqCurve.Q4_PER_DB / 2
+internal const val GainStepQ4 = 1
 private const val AxisHeadroomQ4 = EqCurve.Q4_PER_DB
 private const val MinimumMajorStepQ4 = 5 * EqCurve.Q4_PER_DB
 private const val TargetMajorIntervals = 7.0
