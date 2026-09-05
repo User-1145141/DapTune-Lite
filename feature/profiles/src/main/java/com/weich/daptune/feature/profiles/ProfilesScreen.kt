@@ -69,6 +69,7 @@ import com.weich.daptune.core.eq.CurveFileCodec
 import com.weich.daptune.core.eq.CurveImportFormat
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.domain.runSuspendCatching
+import com.weich.daptune.feature.profiles.ProfilesViewModel
 import java.io.Reader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
