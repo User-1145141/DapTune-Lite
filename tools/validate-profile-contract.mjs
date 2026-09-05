@@ -1,3 +1,5 @@
+      # - name: Validate profile contract
+      #   run: node tools/validate-profile-contract.mjs
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
