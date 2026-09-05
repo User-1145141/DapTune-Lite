@@ -28,7 +28,6 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,7 +52,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,18 +78,15 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ProfilesScreen(
     modifier: Modifier = Modifier,
-    isActive: Boolean = true,
     viewModel: ProfilesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val autoEqState by viewModel.autoEqState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var deleting by remember { mutableStateOf<EqProfile?>(null) }
     var importFormat by remember { mutableStateOf(CurveImportFormat.AUTOMATIC) }
-    var showingAutoEq by rememberSaveable { mutableStateOf(false) }
 
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -115,20 +110,6 @@ fun ProfilesScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect(snackbar::showSnackbar)
-    }
-
-    if (showingAutoEq) {
-        AutoEqSearchScreen(
-            state = autoEqState,
-            snackbarHostState = snackbar,
-            onQueryChange = viewModel::updateAutoEqQuery,
-            onRetry = viewModel::retryAutoEqSearch,
-            onImport = viewModel::importAutoEq,
-            onBack = { showingAutoEq = false },
-            isActive = isActive,
-            modifier = modifier,
-        )
-        return
     }
 
     Scaffold(
@@ -159,7 +140,6 @@ fun ProfilesScreen(
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ImportSourcesCard(
-                    onOpenAutoEq = { showingAutoEq = true },
                     onImportFile = { format ->
                         importFormat = format
                         fileLauncher.launch(arrayOf("*/*"))
@@ -237,7 +217,6 @@ fun ProfilesScreen(
 
 @Composable
 private fun ImportSourcesCard(
-    onOpenAutoEq: () -> Unit,
     onImportFile: (CurveImportFormat) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -247,19 +226,6 @@ private fun ImportSourcesCard(
     )
     AppCard(modifier.fillMaxWidth()) {
         Column {
-            ListItem(
-                headlineContent = { Text("AutoEq") },
-                supportingContent = { Text("搜索官方推荐配置") },
-                leadingContent = {
-                    Icon(Icons.Outlined.Search, contentDescription = null)
-                },
-                trailingContent = {
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = null)
-                },
-                colors = listColors,
-                modifier = Modifier.clickable(onClick = onOpenAutoEq),
-            )
-            HorizontalDivider(Modifier.padding(start = 56.dp))
             Box(Modifier.fillMaxWidth()) {
                 ListItem(
                     headlineContent = { Text("从文件导入") },
@@ -300,8 +266,8 @@ private fun ImportSourcesCard(
 private fun CurveImportFormat.displayName(): String = when (this) {
     CurveImportFormat.AUTOMATIC -> "自动识别"
     CurveImportFormat.DAPTUNE_JSON -> "DapTune 配置（JSON）"
-    CurveImportFormat.GRAPHIC_EQ -> "GraphicEQ（Wavelet / AutoEq）"
-    CurveImportFormat.PARAMETRIC_EQ -> "ParametricEQ（AutoEq / EAPO）"
+    CurveImportFormat.GRAPHIC_EQ -> "GraphicEQ"
+    CurveImportFormat.PARAMETRIC_EQ -> "ParametricEQ（EAPO）"
     CurveImportFormat.FREQUENCY_GAIN_TABLE -> "CSV / TSV 频率－增益表"
 }
 
