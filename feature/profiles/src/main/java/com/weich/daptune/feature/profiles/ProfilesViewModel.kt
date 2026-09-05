@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ProfilesUiState(
@@ -36,11 +35,181 @@ data class ProfilesUiState(
     val userProfiles: List<EqProfile> get() = profiles.filterNot(EqProfile::isBuiltIn)
 }
 
-private const val MINIMUM_AUTO_EQ_QUERY_LENGTH = 2
-private const val MAXIMUM_AUTO_EQ_QUERY_LENGTH = 120
-private const val AUTO_EQ_SEARCH_DEBOUNCE_MILLIS = 300L
+@HiltViewModel
+class ProfilesViewModel @Inject constructor(
+    private val profileRepository: ProfileRepository,
+    private val settingsRepository: SettingsRepository,
+    private val duplicateProfile: DuplicateProfileUseCase,
+    private val importCurve: ImportCurveUseCase,
+    private val saveProfile: SaveProfileUseCase,
+    private val deviceRepository: DeviceRepository,
+    private val routeMonitor: AudioRouteMonitor,
+    private val resolveProfileForRoute: ResolveProfileForRouteUseCase,
+    private val selectProfileForRoute: SelectProfileForRouteUseCase,
+) : ViewModel() {
 
-private fun DapApplyResult.selectionMessage(profileName: String): String = when (this) {
-    is DapApplyResult.Success -> "已切换并应用“$profileName”"
-    is DapApplyResult.Failure -> "已切换到“$profileName”，但未能应用：$detail"
+    private val mutableState = MutableStateFlow(ProfilesUiState())
+    val state: StateFlow<ProfilesUiState> = mutableState
+
+    private val messageChannel = Channel<String>(Channel.BUFFERED)
+    val messages = messageChannel.receiveAsFlow()
+
+    init {
+        viewModelScope.launch {
+            profileRepository.ensureBuiltIns()
+
+            combine(
+                profileRepository.profiles,
+                settingsRepository.settings,
+                deviceRepository.bindings,
+                routeMonitor.routes,
+            ) { profiles, settings, _, route ->
+                val selectedProfileId = resolveProfileForRoute(route)?.id
+                    ?: settings.selectedProfileId
+
+                ProfilesUiState(
+                    profiles = profiles,
+                    selectedProfileId = selectedProfileId,
+                    currentRoute = route,
+                )
+            }.collect(mutableState::emit)
+        }
+    }
+
+    fun select(profile: EqProfile) {
+        val route = mutableState.value.currentRoute
+
+        viewModelScope.launch {
+            runSuspendCatching {
+                selectProfileForRoute(profile.id, route)
+            }.onSuccess { result ->
+                messageChannel.send(
+                    result.selectionMessage(profile.name),
+                )
+            }.onFailure {
+                messageChannel.send(
+                    it.message ?: "无法更新设备配置",
+                )
+            }
+        }
+    }
+
+    fun duplicate(profile: EqProfile) {
+        val route = mutableState.value.currentRoute
+
+        viewModelScope.launch {
+            runSuspendCatching {
+                duplicateProfile(profile, profile.name)
+            }.onSuccess { copy ->
+                selectProfileForRoute(copy.id, route)
+                messageChannel.send(
+                    "已创建“${copy.name}”",
+                )
+            }.onFailure {
+                messageChannel.send(
+                    it.message ?: "复制失败",
+                )
+            }
+        }
+    }
+
+    fun importText(
+        text: String,
+        fileName: String,
+        format: CurveImportFormat = CurveImportFormat.AUTOMATIC,
+        overflowMode: OverflowMode = OverflowMode.FIT,
+    ) {
+        val route = mutableState.value.currentRoute
+
+        viewModelScope.launch {
+            runSuspendCatching {
+                val imported = importCurve.parse(
+                    text,
+                    fileName,
+                    format,
+                )
+
+                val curve = importCurve.convert(
+                    imported,
+                    overflowMode,
+                )
+
+                val saved = saveProfile(
+                    existingId = null,
+                    name = imported.suggestedName,
+                    curve = curve,
+                    source = imported.source,
+                )
+
+                Triple(
+                    saved,
+                    imported.exceedsLimit,
+                    imported.warnings,
+                )
+            }.onSuccess { (saved, adjusted, warnings) ->
+                selectProfileForRoute(
+                    saved.id,
+                    route,
+                )
+
+                val adjustment = if (adjusted) {
+                    "；已按比例压缩到 ±36 dB 范围"
+                } else {
+                    ""
+                }
+
+                val detail = warnings.joinToString(
+                    separator = "；",
+                    prefix = if (warnings.isEmpty()) "" else "；",
+                )
+
+                messageChannel.send(
+                    "已导入“${saved.name}”$adjustment$detail",
+                )
+            }.onFailure { error ->
+                messageChannel.send(
+                    error.message ?: "无法导入文件",
+                )
+            }
+        }
+    }
+
+    fun delete(profile: EqProfile) {
+        if (profile.isBuiltIn) return
+
+        val route = mutableState.value.currentRoute
+        val wasSelected =
+            mutableState.value.selectedProfileId == profile.id
+
+        viewModelScope.launch {
+            runSuspendCatching {
+                profileRepository.deleteProfile(profile.id)
+            }.onSuccess {
+                if (wasSelected) {
+                    selectProfileForRoute(
+                        "builtin.flat",
+                        route,
+                    )
+                }
+
+                messageChannel.send(
+                    "已删除“${profile.name}”",
+                )
+            }.onFailure {
+                messageChannel.send(
+                    it.message ?: "删除失败",
+                )
+            }
+        }
+    }
+}
+
+private fun DapApplyResult.selectionMessage(
+    profileName: String,
+): String = when (this) {
+    is DapApplyResult.Success ->
+        "已切换并应用“$profileName”"
+
+    is DapApplyResult.Failure ->
+        "已切换到“$profileName”，但未能应用：$detail"
 }
