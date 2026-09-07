@@ -2,9 +2,6 @@ package com.weich.daptune.core.designsystem
 
 import com.weich.daptune.core.model.EqCurve
 import kotlin.math.ceil
-import kotlin.math.floor
-import kotlin.math.log10
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /** Shared vertical scale for the overview and all 20 band controls. */
@@ -49,52 +46,42 @@ class GainAxis internal constructor(
 }
 
 fun gainAxisFor(curve: EqCurve): GainAxis =
-    gainAxisForMinimum(curve.toQ4List().min())
+    gainAxisForExtremes(
+        minimumQ4 = curve.toQ4List().min(),
+        maximumQ4 = curve.toQ4List().max(),
+    )
 
-internal fun gainAxisForMinimum(minimumQ4: Int): GainAxis {
-    val defaultMinimumQ4 = -EqCurve.MAX_BOOST_Q4
-    val needsHeadroom = minimumQ4 < defaultMinimumQ4 + AxisHeadroomQ4
-    val requiredMinimumQ4 = if (needsHeadroom) {
-        (minimumQ4.toLong() - AxisHeadroomQ4)
-            .coerceAtLeast(Int.MIN_VALUE.toLong())
-    } else {
-        defaultMinimumQ4.toLong()
-    }
-    val requiredRangeQ4 = EqCurve.MAX_BOOST_Q4.toLong() - requiredMinimumQ4
-    val majorStepQ4 = niceMajorStepQ4(requiredRangeQ4)
-    val alignedMinimumQ4 =
-        (Math.floorDiv(requiredMinimumQ4, majorStepQ4.toLong()) * majorStepQ4.toLong())
-            .coerceIn(EqCurve.MIN_GAIN_Q4.toLong(), Int.MAX_VALUE.toLong())
-            .toInt()
-    val minorStepQ4 =
-        (ceil(majorStepQ4.toDouble() / 10.0 / GainStepQ4) * GainStepQ4)
-            .roundToInt()
-            .coerceAtLeast(GainStepQ4)
+internal fun gainAxisForMinimum(minimumQ4: Int): GainAxis =
+    gainAxisForExtremes(minimumQ4 = minimumQ4, maximumQ4 = 0)
+
+private fun gainAxisForExtremes(
+    minimumQ4: Int,
+    maximumQ4: Int,
+): GainAxis {
+    val maximumGainQ4 = EqCurve.MAX_BOOST_Q4
+    val minimumGainQ4 = EqCurve.MIN_GAIN_Q4
+    val maxAbsQ4 = maxOf(
+        kotlin.math.abs(minimumQ4.toLong()),
+        kotlin.math.abs(maximumQ4.toLong()),
+    ).coerceAtMost(maximumGainQ4.toLong())
+
+    // Keep the default view compact and symmetric. Expand in 3 dB increments when the
+    // actual curve needs more room, while never exceeding the real ±36 dB edit range.
+    val minimumVisibleDb = 6
+    val stepDb = 3
+    val requiredVisibleDb = kotlin.math.ceil(
+        maxOf(minimumVisibleDb.toDouble(), maxAbsQ4.toDouble() / EqCurve.Q4_PER_DB) / stepDb,
+    ).toInt() * stepDb
+    val visibleDb = requiredVisibleDb.coerceIn(minimumVisibleDb, EqCurve.MAX_BOOST_DB)
+    val maximumQ4 = visibleDb * EqCurve.Q4_PER_DB
+    val minimumQ4 = -maximumQ4
+
     return GainAxis(
-        maximumQ4 = EqCurve.MAX_BOOST_Q4,
-        minimumQ4 = alignedMinimumQ4,
-        majorStepQ4 = majorStepQ4,
-        minorStepQ4 = minorStepQ4,
+        maximumQ4 = maximumQ4,
+        minimumQ4 = minimumQ4.coerceAtLeast(minimumGainQ4),
+        majorStepQ4 = stepDb * EqCurve.Q4_PER_DB,
+        minorStepQ4 = EqCurve.Q4_PER_DB,
     )
 }
 
-private fun niceMajorStepQ4(rangeQ4: Long): Int {
-    val rawStepDb = rangeQ4.toDouble() / EqCurve.Q4_PER_DB / TargetMajorIntervals
-    val magnitude = 10.0.pow(floor(log10(rawStepDb)))
-    val normalized = rawStepDb / magnitude
-    val factor = when {
-        normalized <= 1.0 -> 1.0
-        normalized <= 2.0 -> 2.0
-        normalized <= 2.5 -> 2.5
-        normalized <= 5.0 -> 5.0
-        else -> 10.0
-    }
-    return (factor * magnitude * EqCurve.Q4_PER_DB)
-        .coerceIn(MinimumMajorStepQ4.toDouble(), Int.MAX_VALUE.toDouble())
-        .roundToInt()
-}
-
 internal const val GainStepQ4 = 1
-private const val AxisHeadroomQ4 = EqCurve.Q4_PER_DB
-private const val MinimumMajorStepQ4 = 5 * EqCurve.Q4_PER_DB
-private const val TargetMajorIntervals = 7.0

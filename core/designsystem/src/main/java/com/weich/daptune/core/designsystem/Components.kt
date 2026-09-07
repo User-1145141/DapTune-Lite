@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -28,6 +29,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 
 // Matches Material 3's compact-row title easing so the replacement title preserves its motion.
 private val CollapsedTitleAlphaEasing = CubicBezierEasing(.8f, 0f, .8f, .15f)
@@ -144,5 +148,50 @@ fun StatusPill(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             style = MaterialTheme.typography.labelLarge,
         )
+    }
+}
+
+
+/**
+ * Lightweight transient message used for quick operations. New messages replace the old one
+ * immediately instead of being queued, and each message remains visible for 1500 ms.
+ */
+@Composable
+fun DapTuneTransientMessageHost(
+    messages: Flow<String>,
+    modifier: Modifier = Modifier,
+) {
+    var message by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(messages) {
+        messages.collectLatest { text ->
+            message = text
+            delay(1_500)
+            if (message == text) message = null
+        }
+    }
+
+    message?.let { text ->
+        Box(
+            modifier = modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                shadowElevation = 4.dp,
+            ) {
+                Text(
+                    text = text,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }

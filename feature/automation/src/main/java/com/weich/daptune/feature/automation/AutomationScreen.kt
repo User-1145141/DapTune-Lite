@@ -53,8 +53,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,6 +79,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.weich.daptune.core.designsystem.AppCard
 import com.weich.daptune.core.designsystem.DapTuneTopAppBar
+import com.weich.daptune.core.designsystem.DapTuneTransientMessageHost
 import com.weich.daptune.core.model.EqProfile
 import com.weich.daptune.core.model.KnownOutputDevice
 import com.weich.daptune.core.model.OutputRouteIdentityKind
@@ -106,7 +105,8 @@ fun AutomationScreen(
     onOpenAbout: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
+    val uiMessages = remember { MutableSharedFlow<String>(extraBufferCapacity = 16) }
+    val messages = remember(viewModel, uiMessages) { merge(viewModel.messages, uiMessages) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     var pickerTarget by remember { mutableStateOf<ProfilePickerTarget?>(null) }
@@ -134,9 +134,6 @@ fun AutomationScreen(
         }
     }
 
-    LaunchedEffect(viewModel) {
-        viewModel.messages.collect(snackbar::showSnackbar)
-    }
 
     BackHandler(enabled = showOperationLogs) { showOperationLogs = false }
 
@@ -165,7 +162,7 @@ fun AutomationScreen(
                 scrollBehavior = scrollBehavior,
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { DapTuneTransientMessageHost(messages) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

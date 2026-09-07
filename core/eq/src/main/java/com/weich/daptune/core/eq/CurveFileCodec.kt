@@ -23,7 +23,7 @@ data class ImportedCurve(
     val minimumDb: Double get() = gainsDb.min()
     val maximumDb: Double get() = gainsDb.max()
     val exceedsLimit: Boolean
-        get() = maximumDb > EqCurve.MAX_BOOST_DB
+        get() = maximumDb > EqCurve.MAX_BOOST_DB || minimumDb < EqCurve.MIN_GAIN_DB
 }
 
 class CurveImportException(message: String, cause: Throwable? = null) :
@@ -129,7 +129,7 @@ object CurveFileCodec {
         val curve = try {
             EqCurve.ofQ4(dto.gainsQ4)
         } catch (error: IllegalArgumentException) {
-            throw CurveImportException("文件中的正增益超过 +${EqCurve.MAX_BOOST_DB} dB", error)
+            throw CurveImportException("文件中的增益超出 ±${EqCurve.MAX_BOOST_DB} dB 范围", error)
         }
         return ImportedCurve(
             suggestedName = profileName,

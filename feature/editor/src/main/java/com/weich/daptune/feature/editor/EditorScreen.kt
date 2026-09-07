@@ -38,8 +38,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,6 +61,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.weich.daptune.core.designsystem.AppCard
 import com.weich.daptune.core.designsystem.DapTuneTopAppBar
+import com.weich.daptune.core.designsystem.DapTuneTransientMessageHost
 import com.weich.daptune.core.designsystem.EqBandTrackHeight
 import com.weich.daptune.core.designsystem.EqCurveOverview
 import com.weich.daptune.core.designsystem.GainScale
@@ -74,6 +73,8 @@ import com.weich.daptune.core.designsystem.formatGain
 import com.weich.daptune.core.designsystem.gainAxisFor
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqProfile
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,7 +84,8 @@ fun EditorScreen(
     viewModel: EditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
+    val uiMessages = remember { MutableSharedFlow<String>(extraBufferCapacity = 16) }
+    val messages = remember(viewModel, uiMessages) { merge(viewModel.messages, uiMessages) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val bandListState = rememberLazyListState()
@@ -94,7 +96,7 @@ fun EditorScreen(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is EditorEvent.Message -> snackbar.showSnackbar(event.text)
+                is EditorEvent.Message -> uiMessages.tryEmit(event.text)
                 is EditorEvent.SuggestSaveName -> saveName = event.name
             }
         }
@@ -127,7 +129,7 @@ fun EditorScreen(
                 onApply = viewModel::apply,
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { DapTuneTransientMessageHost(messages) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

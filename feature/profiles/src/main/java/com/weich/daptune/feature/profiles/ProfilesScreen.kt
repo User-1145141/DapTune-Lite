@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -41,8 +42,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -64,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.weich.daptune.core.designsystem.AppCard
 import com.weich.daptune.core.designsystem.CurveSparkline
 import com.weich.daptune.core.designsystem.DapTuneTopAppBar
+import com.weich.daptune.core.designsystem.DapTuneTransientMessageHost
 import com.weich.daptune.core.designsystem.formatGain
 import com.weich.daptune.core.eq.CurveFileCodec
 import com.weich.daptune.core.eq.CurveImportFormat
@@ -72,6 +72,8 @@ import com.weich.daptune.domain.runSuspendCatching
 import com.weich.daptune.feature.profiles.ProfilesViewModel
 import java.io.Reader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -82,12 +84,33 @@ fun ProfilesScreen(
     viewModel: ProfilesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
+    val uiMessages = remember { MutableSharedFlow<String>(extraBufferCapacity = 16) }
+    val messages = remember(viewModel, uiMessages) { merge(viewModel.messages, uiMessages) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var deleting by remember { mutableStateOf<EqProfile?>(null) }
     var importFormat by remember { mutableStateOf(CurveImportFormat.AUTOMATIC) }
+    var pendingExportProfile by remember { mutableStateOf<EqProfile?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val profile = pendingExportProfile
+        pendingExportProfile = null
+        if (uri == null || profile == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            runSuspendCatching {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                        writer.write(CurveFileCodec.exportNative(profile.name, profile.curve))
+                    } ?: error("无法创建文件")
+                }
+            }.onSuccess {
+                uiMessages.tryEmit("已导出“${profile.name}”")
+            }.onFailure {
+                uiMessages.tryEmit(it.message ?: "无法导出配置")
+            }
+        }
+    }
 
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -105,13 +128,10 @@ fun ProfilesScreen(
                     text to name
                 }
             }.onSuccess { (text, name) -> viewModel.importText(text, name, importFormat) }
-                .onFailure { snackbar.showSnackbar(it.message ?: "无法读取文件") }
+                .onFailure { uiMessages.tryEmit(it.message ?: "无法读取文件") }
         }
     }
 
-    LaunchedEffect(viewModel) {
-        viewModel.messages.collect(snackbar::showSnackbar)
-    }
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -122,7 +142,7 @@ fun ProfilesScreen(
                 scrollBehavior = scrollBehavior,
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { DapTuneTransientMessageHost(messages) },
     ) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -174,6 +194,10 @@ fun ProfilesScreen(
                         selected = profile.id == state.selectedProfileId,
                         onClick = { viewModel.select(profile) },
                         onDuplicate = { viewModel.duplicate(profile) },
+                        onExport = {
+                            pendingExportProfile = profile
+                            exportLauncher.launch("${safeExportFileName(profile.name)}.json")
+                        },
                         onDelete = { deleting = profile },
                     )
                 }
@@ -190,6 +214,10 @@ fun ProfilesScreen(
                     selected = profile.id == state.selectedProfileId,
                     onClick = { viewModel.select(profile) },
                     onDuplicate = { viewModel.duplicate(profile) },
+                    onExport = {
+                        pendingExportProfile = profile
+                        exportLauncher.launch("${safeExportFileName(profile.name)}.json")
+                    },
                     onDelete = null,
                 )
             }
@@ -317,6 +345,7 @@ private fun ProfileCard(
     selected: Boolean,
     onClick: () -> Unit,
     onDuplicate: () -> Unit,
+    onExport: () -> Unit,
     onDelete: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -383,6 +412,16 @@ private fun ProfileCard(
                                 onDuplicate()
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text("导出") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onExport()
+                            },
+                        )
                         onDelete?.let { delete ->
                             DropdownMenuItem(
                                 text = { Text("删除") },
@@ -426,3 +465,9 @@ private fun curveRange(profile: EqProfile): String {
         "${formatGain(minimum)} — ${formatGain(maximum)} dB"
     }
 }
+
+
+private fun safeExportFileName(name: String): String =
+    name.trim()
+        .replace(Regex("[\\/:*?\"<>|]"), "_")
+        .ifBlank { "daptune-profile" }

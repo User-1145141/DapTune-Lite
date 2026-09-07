@@ -8,21 +8,21 @@ import org.junit.Test
 class EqVisualsMathTest {
     @Test
     fun `track endpoints and center map to exact gains`() {
-        assertEquals(EqCurve.MAX_BOOST_Q4, gainAt(y = 12f, axis = DefaultAxis))
+        assertEquals(6 * EqCurve.Q4_PER_DB, gainAt(y = 12f, axis = DefaultAxis))
         assertEquals(0, gainAt(y = 150f, axis = DefaultAxis))
-        assertEquals(-EqCurve.MAX_BOOST_Q4, gainAt(y = 288f, axis = DefaultAxis))
+        assertEquals(-6 * EqCurve.Q4_PER_DB, gainAt(y = 288f, axis = DefaultAxis))
     }
 
     @Test
-    fun `track position is always clamped and snapped to half decibel`() {
-        assertEquals(EqCurve.MAX_BOOST_Q4, gainAt(y = -1_000f, axis = ExpandedAxis))
-        assertEquals(-320, gainAt(y = 1_000f, axis = ExpandedAxis))
-        assertEquals(0, gainAt(y = 153f, axis = ExpandedAxis) % (EqCurve.Q4_PER_DB / 2))
+    fun `track position is always clamped and snapped to one sixteenth decibel`() {
+        assertEquals(ExpandedAxis.maximumQ4, gainAt(y = -1_000f, axis = ExpandedAxis))
+        assertEquals(ExpandedAxis.minimumQ4, gainAt(y = 1_000f, axis = ExpandedAxis))
+        assertEquals(gainAt(y = 153f, axis = ExpandedAxis), gainAt(y = 153f, axis = ExpandedAxis).coerceIn(ExpandedAxis.minimumQ4, ExpandedAxis.maximumQ4))
     }
 
     @Test
     fun `gain to track position is the inverse across an expanded axis`() {
-        for (gainQ4 in ExpandedAxis.minimumQ4..ExpandedAxis.maximumQ4 step EqCurve.Q4_PER_DB / 2) {
+        for (gainQ4 in ExpandedAxis.minimumQ4..ExpandedAxis.maximumQ4 step 1) {
             val y = trackYForGainQ4(
                 gainQ4 = gainQ4,
                 trackHeightPx = TrackHeight,
@@ -34,12 +34,13 @@ class EqVisualsMathTest {
     }
 
     @Test
-    fun `axis defaults to plus or minus ten and expands downward`() {
-        assertEquals(EqCurve.MAX_BOOST_Q4, DefaultAxis.maximumQ4)
-        assertEquals(-EqCurve.MAX_BOOST_Q4, DefaultAxis.minimumQ4)
-        assertEquals(-320, ExpandedAxis.minimumQ4)
+    fun `axis defaults to symmetric plus or minus six and expands symmetrically`() {
+        assertEquals(6 * EqCurve.Q4_PER_DB, DefaultAxis.maximumQ4)
+        assertEquals(-6 * EqCurve.Q4_PER_DB, DefaultAxis.minimumQ4)
+        assertEquals(18 * EqCurve.Q4_PER_DB, ExpandedAxis.maximumQ4)
+        assertEquals(-18 * EqCurve.Q4_PER_DB, ExpandedAxis.minimumQ4)
         assertEquals(
-            listOf(160, 80, 0, -80, -160, -240, -320),
+            listOf(288, 240, 192, 144, 96, 48, 0, -48, -96, -144, -192, -240, -288),
             ExpandedAxis.majorTicksQ4(),
         )
     }
