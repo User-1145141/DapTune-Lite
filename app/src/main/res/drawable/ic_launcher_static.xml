@@ -16,18 +16,16 @@
         android:strokeColor="#FFFFFF"
         android:strokeWidth="4"
         android:strokeLineCap="round"
-android:pathData="
-    M18,50L18,58
-    M25,46L25,62
-    M32,41L32,67
-    M39,35L39,73
-    M46,29L46,79
-    M54,20L54,88
-    M62,29L62,79
-    M69,35L69,73
-    M76,41L76,67
-    M83,46L83,62
-    M90,50L90,58" />
+        android:pathData="
+            M18,49L18,59
+            M27,44L27,64
+            M36,38L36,70
+            M45,31L45,77
+            M54,20L54,88
+            M63,31L63,77
+            M72,38L72,70
+            M81,44L81,64
+            M90,49L90,59" />
 
     <!-- Cyan EQ curve -->
     <path
