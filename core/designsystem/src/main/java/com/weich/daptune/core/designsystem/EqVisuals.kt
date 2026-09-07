@@ -145,9 +145,8 @@ fun EqCurveOverview(
                 textLayoutResult = labelLayout,
                 topLeft = Offset(
                     x = 3.dp.toPx(),
-                    y = (y - labelLayout.size.height / 2f +
-                        if (gainQ4 == axis.minimumQ4) 2.dp.toPx() else 0f)
-                        .coerceIn(0f, plotEndY + 2.dp.toPx() - labelLayout.size.height),
+                    y = (y - labelLayout.size.height / 2f
+                        .coerceIn(0f, plotEndY - labelLayout.size.height),
                 ),
             )
         }
