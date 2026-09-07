@@ -39,10 +39,23 @@ class EqVisualsMathTest {
         assertEquals(-6 * EqCurve.Q4_PER_DB, DefaultAxis.minimumQ4)
         assertEquals(18 * EqCurve.Q4_PER_DB, ExpandedAxis.maximumQ4)
         assertEquals(-18 * EqCurve.Q4_PER_DB, ExpandedAxis.minimumQ4)
+        assertEquals(6 * EqCurve.Q4_PER_DB, DefaultAxis.majorStepQ4)
+        assertEquals(6 * EqCurve.Q4_PER_DB, ExpandedAxis.majorStepQ4)
         assertEquals(
             listOf(288, 240, 192, 144, 96, 48, 0, -48, -96, -144, -192, -240, -288),
             ExpandedAxis.majorTicksQ4(),
         )
+    }
+
+    @Test
+    fun `axis expands in six decibel increments`() {
+        val axisAtSevenDb = gainAxisForMinimum(-7 * EqCurve.Q4_PER_DB)
+        val axisAtNineteenDb = gainAxisForMinimum(-19 * EqCurve.Q4_PER_DB)
+
+        assertEquals(12 * EqCurve.Q4_PER_DB, axisAtSevenDb.maximumQ4)
+        assertEquals(-12 * EqCurve.Q4_PER_DB, axisAtSevenDb.minimumQ4)
+        assertEquals(24 * EqCurve.Q4_PER_DB, axisAtNineteenDb.maximumQ4)
+        assertEquals(-24 * EqCurve.Q4_PER_DB, axisAtNineteenDb.minimumQ4)
     }
 
     @Test
