@@ -145,7 +145,7 @@ fun EqCurveOverview(
                 textLayoutResult = labelLayout,
                 topLeft = Offset(
                     x = 3.dp.toPx(),
-                    y = (y - labelLayout.size.height / 2f
+                    y = (y - labelLayout.size.height / 2f）
                         .coerceIn(0f, plotEndY - labelLayout.size.height),
                 ),
             )
