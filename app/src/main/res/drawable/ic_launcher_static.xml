@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -10,30 +11,29 @@
         android:pathData="M0,0h108v108h-108z" />
 
     <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="1.10"
-        android:scaleY="1.10"
-        android:translateY="-4">
+        android:translateX="3"
+        android:translateY="3">
 
-        <!-- 9 symmetric white vertical bars -->
+        <!-- 11 symmetric white vertical bars -->
         <path
             android:fillColor="@android:color/transparent"
             android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
-            android:strokeLineCap="butt"
+            android:strokeLineCap="round"
             android:pathData="
-                M24,43L24,65
-                M31.5,37L31.5,71
-                M39,31L39,77
-                M46.5,26L46.5,82
-                M54,20L54,88
-                M61.5,26L61.5,82
-                M69,31L69,77
-                M76.5,37L76.5,71
-                M84,43L84,65" />
+                M20,45L20,63
+                M27,40L27,68
+                M34,35L34,73
+                M41,30L41,78
+                M48,25L48,83
+                M55,20L55,88
+                M62,25L62,83
+                M69,30L69,78
+                M76,35L76,73
+                M83,40L83,68
+                M90,45L90,63" />
 
-        <!-- Continuous cyan EQ curve -->
+        <!-- Cyan EQ curve -->
         <path
             android:fillColor="@android:color/transparent"
             android:strokeColor="#00D9FF"
@@ -41,22 +41,21 @@
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
             android:pathData="
-                M20,66
-                C27,66 31,45 39,45
-                C46,45 48,61 54,61
-                C61,61 65,48 72,48
-                C78,48 83,57 89,57
-                C93,57 96,55 100,53" />
+                M17,66
+                C24,66 28,45 37,45
+                C45,45 48,62 55,62
+                C63,62 67,49 75,49
+                C82,49 86,58 91,58" />
 
         <!-- Cyan curve nodes -->
         <path
             android:fillColor="#00D9FF"
             android:pathData="
-                M20,62A4,4 0,1 1,20,70A4,4 0,1 1,20,62
-                M39,41A4,4 0,1 1,39,49A4,4 0,1 1,39,41
-                M54,57A4,4 0,1 1,54,65A4,4 0,1 1,54,57
-                M72,44A4,4 0,1 1,72,52A4,4 0,1 1,72,44
-                M89,53A4,4 0,1 1,89,61A4,4 0,1 1,89,53" />
+                M17,62A4,4 0,1 1,17,70A4,4 0,1 1,17,62
+                M37,41A4,4 0,1 1,37,49A4,4 0,1 1,37,41
+                M55,58A4,4 0,1 1,55,66A4,4 0,1 1,55,58
+                M75,45A4,4 0,1 1,75,53A4,4 0,1 1,75,45
+                M91,54A4,4 0,1 1,91,62A4,4 0,1 1,91,54" />
 
     </group>
 
