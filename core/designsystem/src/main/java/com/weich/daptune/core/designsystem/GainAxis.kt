@@ -67,8 +67,8 @@ private fun gainAxisForExtremes(
 
     // Keep the default view compact and symmetric. Expand in 6 dB increments when the
     // actual curve needs more room, while never exceeding the real ±36 dB edit range.
-    val minimumVisibleDb = 6
-    val stepDb = 6
+    val minimumVisibleDb = DefaultVisibleAxisDb
+    val stepDb = AxisExpansionDb
     val requiredVisibleDb = kotlin.math.ceil(
         maxOf(minimumVisibleDb.toDouble(), maxAbsQ4.toDouble() / EqCurve.Q4_PER_DB) / stepDb,
     ).toInt() * stepDb
@@ -83,5 +83,8 @@ private fun gainAxisForExtremes(
         minorStepQ4 = EqCurve.Q4_PER_DB,
     )
 }
+
+private const val DefaultVisibleAxisDb = 6
+private const val AxisExpansionDb = 6
 
 internal const val GainStepQ4 = 1

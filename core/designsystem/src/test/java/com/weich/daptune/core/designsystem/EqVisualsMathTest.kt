@@ -42,7 +42,7 @@ class EqVisualsMathTest {
         assertEquals(6 * EqCurve.Q4_PER_DB, DefaultAxis.majorStepQ4)
         assertEquals(6 * EqCurve.Q4_PER_DB, ExpandedAxis.majorStepQ4)
         assertEquals(
-            listOf(288, 240, 192, 144, 96, 48, 0, -48, -96, -144, -192, -240, -288),
+            listOf(288, 192, 96, 0, -96, -192, -288),
             ExpandedAxis.majorTicksQ4(),
         )
     }
