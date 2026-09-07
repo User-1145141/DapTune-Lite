@@ -142,13 +142,16 @@ fun EqCurveOverview(
             val label = formatAxisGain(gainQ4)
             val labelLayout = textMeasurer.measure(text = label, style = axisStyle)
             drawText(
-                textLayoutResult = labelLayout,
-                topLeft = Offset(
-                    x = 3.dp.toPx(),
-                    y = (y - labelLayout.size.height / 2f）
-                        .coerceIn(0f, plotEndY - labelLayout.size.height),
-                ),
-            )
+    textLayoutResult = labelLayout,
+    topLeft = Offset(
+        x = 3.dp.toPx(),
+        y = (y - labelLayout.size.height / 2f)
+            .coerceIn(
+                0f,
+                plotEndY - labelLayout.size.height,
+            ),
+    ),
+)
         }
         verticalGridBands.forEach { index ->
             val x = startInset + plotWidth * index / (DapBandPlan.bandCount - 1)
