@@ -2,9 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
+      - develop
+      - "User-114514's-edition"
+
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+
+  workflow_dispatch:
 
 jobs:
   build:
