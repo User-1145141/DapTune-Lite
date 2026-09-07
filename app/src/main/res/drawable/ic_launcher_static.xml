@@ -4,6 +4,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- Background -->
     <path
         android:fillColor="#000000"
         android:pathData="M0,0h108v108h-108z" />
@@ -15,24 +16,47 @@
         android:scaleY="1.10"
         android:translateY="-4">
 
+        <!-- 9 symmetric white vertical bars -->
         <path
             android:fillColor="@android:color/transparent"
             android:strokeColor="#FFFFFF"
             android:strokeWidth="4"
-            android:strokeLineCap="round"
-            android:pathData="M27,54L27,63M33,47L33,69M39,40L39,76M45,34L45,82M51,29L51,87M57,25L57,91M63,29L63,87M69,34L69,82M75,40L75,76M81,47L81,69" />
+            android:strokeLineCap="butt"
+            android:pathData="
+                M24,43L24,65
+                M31.5,37L31.5,71
+                M39,31L39,77
+                M46.5,26L46.5,82
+                M54,20L54,88
+                M61.5,26L61.5,82
+                M69,31L69,77
+                M76.5,37L76.5,71
+                M84,43L84,65" />
 
+        <!-- Continuous cyan EQ curve -->
         <path
             android:fillColor="@android:color/transparent"
             android:strokeColor="#00D9FF"
             android:strokeWidth="6"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
-            android:pathData="M24,65C31,65 35,44 44,44C52,44 53,62 61,62C68,62 71,50 78,50C84,50 86,64 84,65" />
+            android:pathData="
+                M20,66
+                C27,66 31,45 39,45
+                C46,45 48,61 54,61
+                C61,61 65,48 72,48
+                C78,48 83,57 89,57
+                C93,57 96,55 100,53" />
 
+        <!-- Cyan curve nodes -->
         <path
             android:fillColor="#00D9FF"
-            android:pathData="M24,61A4,4 0,1 1,24,69A4,4 0,1 1,24,61M44,40A4,4 0,1 1,44,48A4,4 0,1 1,44,40M61,58A4,4 0,1 1,61,66A4,4 0,1 1,61,58M78,46A4,4 0,1 1,78,54A4,4 0,1 1,78,46M84,61A4,4 0,1 1,84,69A4,4 0,1 1,84,61" />
+            android:pathData="
+                M20,62A4,4 0,1 1,20,70A4,4 0,1 1,20,62
+                M39,41A4,4 0,1 1,39,49A4,4 0,1 1,39,41
+                M54,57A4,4 0,1 1,54,65A4,4 0,1 1,54,57
+                M72,44A4,4 0,1 1,72,52A4,4 0,1 1,72,44
+                M89,53A4,4 0,1 1,89,61A4,4 0,1 1,89,53" />
 
     </group>
 
