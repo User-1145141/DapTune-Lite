@@ -74,7 +74,6 @@ import com.weich.daptune.core.designsystem.gainAxisFor
 import com.weich.daptune.core.model.DapBandPlan
 import com.weich.daptune.core.model.EqProfile
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,7 +84,7 @@ fun EditorScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val uiMessages = remember { MutableSharedFlow<String>(extraBufferCapacity = 16) }
-    val messages = remember(viewModel, uiMessages) { merge(viewModel.messages, uiMessages) }
+    val messages = uiMessages
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val bandListState = rememberLazyListState()
@@ -397,7 +396,7 @@ private fun BandEditorCard(
             ) {
                 Text("20 段均衡器", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "1/16 dB 步进",
+                    "¹⁄₁₆ dB 步进",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
