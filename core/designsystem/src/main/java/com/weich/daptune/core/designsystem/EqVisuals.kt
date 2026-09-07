@@ -83,8 +83,8 @@ fun EqCurveOverview(
     val currentOnBandSelected by rememberUpdatedState(onBandSelected)
     val plotStartInset = 42.dp
     val plotEndInset = 8.dp
-    val plotTopInset = 14.dp
-    val plotBottomInset = 30.dp
+    val plotTopInset = 8.dp
+    val plotBottomInset = 8.dp
     val verticalGridBands = listOf(0, 4, 9, 14, 19)
 
     Canvas(
@@ -145,11 +145,7 @@ fun EqCurveOverview(
     textLayoutResult = labelLayout,
     topLeft = Offset(
         x = 3.dp.toPx(),
-        y = (y - labelLayout.size.height / 2f)
-            .coerceIn(
-                0f,
-                plotEndY - labelLayout.size.height,
-            ),
+        y = y - labelLayout.size.height / 2f,
     ),
 )
         }
