@@ -5,11 +5,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.Balance
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Equalizer
 import androidx.compose.material.icons.outlined.PrivacyTip
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,12 +36,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.weich.daptune.core.designsystem.AppCard
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(
     versionName: String,
     onBack: () -> Unit,
     onOpenProject: () -> Unit,
+    onOpenOriginalProject: () -> Unit,
     onOpenLicense: () -> Unit,
     onOpenPrivacyPolicy: () -> Unit,
     modifier: Modifier = Modifier,
@@ -57,7 +57,10 @@ fun AboutScreen(
                 title = { Text("关于") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = "返回",
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -67,7 +70,7 @@ fun AboutScreen(
             )
         },
     ) { padding ->
-        androidx.compose.foundation.lazy.LazyColumn(
+        LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = padding.calculateTopPadding() + 12.dp,
@@ -95,11 +98,13 @@ fun AboutScreen(
                             modifier = Modifier.padding(18.dp),
                         )
                     }
+
                     Text(
-                        text = "DapTune",
+                        text = "DapTune Lite",
                         modifier = Modifier.padding(top = 12.dp),
                         style = MaterialTheme.typography.headlineSmall,
                     )
+
                     Text(
                         text = "版本 $versionName",
                         style = MaterialTheme.typography.bodyMedium,
@@ -109,6 +114,7 @@ fun AboutScreen(
             }
 
             item { SectionHeading("项目") }
+
             item {
                 AppCard(
                     modifier = Modifier
@@ -117,23 +123,56 @@ fun AboutScreen(
                 ) {
                     Column {
                         ProjectRow(
-                            title = "GitHub",
-                            subtitle = "silverpoetry/DapTune",
-                            icon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                            title = "DapTune Lite",
+                            subtitle = "User-1145141/DapTune-Lite",
+                            icon = {
+                                Icon(
+                                    Icons.Outlined.Code,
+                                    contentDescription = null,
+                                )
+                            },
                             onClick = onOpenProject,
                         )
+
                         SettingsDivider()
+
+                        ProjectRow(
+                            title = "基于 DapTune",
+                            subtitle = "原项目：silverpoetry/DapTune",
+                            icon = {
+                                Icon(
+                                    Icons.Outlined.Code,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = onOpenOriginalProject,
+                        )
+
+                        SettingsDivider()
+
                         ProjectRow(
                             title = "开源许可",
                             subtitle = "Apache License 2.0",
-                            icon = { Icon(Icons.Outlined.Balance, contentDescription = null) },
+                            icon = {
+                                Icon(
+                                    Icons.Outlined.Balance,
+                                    contentDescription = null,
+                                )
+                            },
                             onClick = onOpenLicense,
                         )
+
                         SettingsDivider()
+
                         ProjectRow(
                             title = "隐私说明",
-                            subtitle = "查看数据处理方式",
-                            icon = { Icon(Icons.Outlined.PrivacyTip, contentDescription = null) },
+                            subtitle = "查看 DapTune Lite 的数据处理方式",
+                            icon = {
+                                Icon(
+                                    Icons.Outlined.PrivacyTip,
+                                    contentDescription = null,
+                                )
+                            },
                             onClick = onOpenPrivacyPolicy,
                         )
                     }
@@ -155,7 +194,10 @@ private fun ProjectRow(
         supportingContent = { Text(subtitle) },
         leadingContent = icon,
         trailingContent = {
-            Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null)
+            Icon(
+                Icons.AutoMirrored.Outlined.OpenInNew,
+                contentDescription = null,
+            )
         },
         modifier = Modifier.clickable(onClick = onClick),
         colors = transparentListItemColors(),
