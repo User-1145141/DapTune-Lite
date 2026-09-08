@@ -109,13 +109,14 @@ private fun DapTuneApp() {
     var showAbout by rememberSaveable { mutableStateOf(false) }
 
     if (showAbout) {
-        AboutScreen(
-            versionName = BuildConfig.VERSION_NAME,
-            onBack = { showAbout = false },
-            onOpenProject = { openUrl(context, ProjectUrl) },
-            onOpenLicense = { openUrl(context, LicenseUrl) },
-            onOpenPrivacyPolicy = { openUrl(context, PrivacyUrl) },
-        )
+AboutScreen(
+    versionName = BuildConfig.VERSION_NAME,
+    onBack = { showAbout = false },
+    onOpenProject = { openUrl(context, ProjectUrl) },
+    onOpenOriginalProject = { openUrl(context, OriginalProjectUrl) },
+    onOpenLicense = { openUrl(context, LicenseUrl) },
+    onOpenPrivacyPolicy = { openUrl(context, PrivacyUrl) },
+)
     } else {
         MainPager(onOpenAbout = { showAbout = true })
     }
@@ -269,6 +270,7 @@ private fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
 
-private const val ProjectUrl = "https://github.com/silverpoetry/DapTune"
-private const val LicenseUrl = "https://github.com/silverpoetry/DapTune/blob/main/LICENSE"
-private const val PrivacyUrl = "https://github.com/silverpoetry/DapTune/blob/main/PRIVACY.md"
+private const val ProjectUrl = "https://github.com/User-1145141/DapTune-Lite"
+private const val OriginalProjectUrl = "https://github.com/silverpoetry/DapTune"
+private const val LicenseUrl = "https://github.com/User-1145141/DapTune-Lite/blob/main/LICENSE"
+private const val PrivacyUrl = "https://github.com/User-1145141/DapTune-Lite/blob/main/PRIVACY.md"
