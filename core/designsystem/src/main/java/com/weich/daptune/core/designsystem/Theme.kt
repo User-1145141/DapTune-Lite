@@ -7,92 +7,104 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+/*
+ * DapTune Lite color system
+ *
+ * Visual identity:
+ *   Black  #000000
+ *   White  #FFFFFF
+ *   Cyan   #00FFFF
+ *   Red    #FF0000
+ *
+ * Dynamic system colors are intentionally disabled.
+ */
+
 private val LightColors = lightColorScheme(
-    // 主色：鲜明蓝
-    primary = Color(0xFF0057D9),
-    onPrimary = Color.White,
+    // Cyan: primary interaction color
+    primary = Color(0xFF00FFFF),
+    onPrimary = Color(0xFF000000),
 
-    // 主色容器
-    primaryContainer = Color(0xFFD9E7FF),
-    onPrimaryContainer = Color(0xFF001A41),
+    // Dark cyan container for readable contrast
+    primaryContainer = Color(0xFFCCFFFF),
+    onPrimaryContainer = Color(0xFF000000),
 
-    // 次要色：冷灰蓝
-    secondary = Color(0xFF4E6078),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCE5F3),
-    onSecondaryContainer = Color(0xFF0B1C2E),
+    // Grayscale secondary colors
+    secondary = Color(0xFF555555),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFE6E6E6),
+    onSecondaryContainer = Color(0xFF000000),
 
-    // 强调色：青色
-    tertiary = Color(0xFF007A76),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFF9CF2E8),
-    onTertiaryContainer = Color(0xFF00201E),
+    // Pure red: emphasis / warning / destructive accent
+    tertiary = Color(0xFFFF0000),
+    onTertiary = Color(0xFF000000),
+    tertiaryContainer = Color(0xFFFFCCCC),
+    onTertiaryContainer = Color(0xFF000000),
 
-    // 背景
-    background = Color(0xFFF6F8FC),
-    onBackground = Color(0xFF171A20),
+    // Pure white background
+    background = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF000000),
 
-    // 表面 / 卡片
-    surface = Color(0xFFFCFCFF),
-    onSurface = Color(0xFF171A20),
+    // White surfaces
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF000000),
 
-    // 表面变体
-    surfaceVariant = Color(0xFFE2E7F0),
-    onSurfaceVariant = Color(0xFF444850),
+    // Light grayscale surface variant
+    surfaceVariant = Color(0xFFE6E6E6),
+    onSurfaceVariant = Color(0xFF333333),
 
-    // 边框
-    outline = Color(0xFF747880),
-    outlineVariant = Color(0xFFC4C8D0),
+    // Grayscale outlines
+    outline = Color(0xFF666666),
+    outlineVariant = Color(0xFFCCCCCC),
 
-    // 错误
-    error = Color(0xFFBA1A1A),
-    onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
+    // Error: pure red
+    error = Color(0xFFFF0000),
+    onError = Color(0xFF000000),
+    errorContainer = Color(0xFFFFCCCC),
+    onErrorContainer = Color(0xFF000000),
 )
 
 private val DarkColors = darkColorScheme(
-    // 主色：明亮蓝
-    primary = Color(0xFF9DBBFF),
-    onPrimary = Color(0xFF002D70),
+    // Cyan: primary interaction color
+    primary = Color(0xFF00FFFF),
+    onPrimary = Color(0xFF000000),
 
-    // 主色容器
-    primaryContainer = Color(0xFF174A9F),
-    onPrimaryContainer = Color(0xFFD9E7FF),
+    // Dark cyan container
+    primaryContainer = Color(0xFF003333),
+    onPrimaryContainer = Color(0xFF00FFFF),
 
-    // 次要色
-    secondary = Color(0xFFB9C7DF),
-    onSecondary = Color(0xFF233144),
-    secondaryContainer = Color(0xFF39495F),
-    onSecondaryContainer = Color(0xFFDCE5F3),
+    // Grayscale secondary colors
+    secondary = Color(0xFFB3B3B3),
+    onSecondary = Color(0xFF000000),
+    secondaryContainer = Color(0xFF333333),
+    onSecondaryContainer = Color(0xFFFFFFFF),
 
-    // 强调色：青色
-    tertiary = Color(0xFF69DDD4),
-    onTertiary = Color(0xFF003734),
-    tertiaryContainer = Color(0xFF005550),
-    onTertiaryContainer = Color(0xFF9CF2E8),
+    // Pure red: emphasis / warning / destructive accent
+    tertiary = Color(0xFFFF0000),
+    onTertiary = Color(0xFF000000),
+    tertiaryContainer = Color(0xFF660000),
+    onTertiaryContainer = Color(0xFFFFCCCC),
 
-    // 背景
-    background = Color(0xFF0F1115),
-    onBackground = Color(0xFFE2E5EC),
+    // Pure black background
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFFFFFFF),
 
-    // 表面 / 卡片
-    surface = Color(0xFF12151A),
-    onSurface = Color(0xFFE2E5EC),
+    // Pure black surfaces
+    surface = Color(0xFF000000),
+    onSurface = Color(0xFFFFFFFF),
 
-    // 表面变体
-    surfaceVariant = Color(0xFF41464F),
-    onSurfaceVariant = Color(0xFFC4C8D0),
+    // Slightly lifted dark surface
+    surfaceVariant = Color(0xFF1A1A1A),
+    onSurfaceVariant = Color(0xFFCCCCCC),
 
-    // 边框
-    outline = Color(0xFF8E939C),
-    outlineVariant = Color(0xFF41464F),
+    // Grayscale outlines
+    outline = Color(0xFF999999),
+    outlineVariant = Color(0xFF333333),
 
-    // 错误
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
+    // Error: pure red
+    error = Color(0xFFFF0000),
+    onError = Color(0xFF000000),
+    errorContainer = Color(0xFF660000),
+    onErrorContainer = Color(0xFFFFCCCC),
 )
 
 @Composable
