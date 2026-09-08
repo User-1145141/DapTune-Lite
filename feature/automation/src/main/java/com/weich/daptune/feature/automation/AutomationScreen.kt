@@ -359,8 +359,8 @@ fun AutomationScreen(
                         .fillMaxWidth(),
                 ) {
                     ListItem(
-                        headlineContent = { Text("关于 DapTune") },
-                        supportingContent = { Text("版本、更新与开源信息") },
+                        headlineContent = { Text("关于 DapTune Lite") },
+                        supportingContent = { Text("版本、开源许可与隐私说明") },
                         leadingContent = {
                             Icon(Icons.Outlined.Info, contentDescription = null)
                         },
