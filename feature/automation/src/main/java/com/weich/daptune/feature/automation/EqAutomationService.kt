@@ -325,7 +325,7 @@ class EqAutomationService : Service() {
         )
         return NotificationCompat.Builder(this, NotificationChannelId)
             .setSmallIcon(R.drawable.ic_notification_equalizer)
-            .setContentTitle("DapTune 自动切换")
+            .setContentTitle("DapTune Lite 自动切换")
             .setContentText(text)
             .setContentIntent(contentIntent)
             .setOngoing(true)
