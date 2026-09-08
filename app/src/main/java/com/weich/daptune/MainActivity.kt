@@ -158,7 +158,7 @@ private fun MainPager(onOpenAbout: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            beyondViewportPageCount = 1,
+            beyondViewportPageCount = 0,
             key = { destinations[it].name },
         ) {
             when (destinations[it]) {
